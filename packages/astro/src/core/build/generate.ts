@@ -363,6 +363,7 @@ async function generatePath(
 			: astroConfig.site,
 		ssr,
 		streaming: true,
+		context: null,
 	};
 
 	let body: string;

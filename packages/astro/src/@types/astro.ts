@@ -236,6 +236,11 @@ export interface AstroGlobal extends AstroGlobalPartial {
 		 */
 		render(slotName: string, args?: any[]): Promise<string>;
 	};
+
+	/**
+	 * Context object created by the server.
+	 */
+	 context: any;
 }
 
 export interface AstroGlobalPartial {
@@ -1078,6 +1083,7 @@ type Body = string;
 export interface APIContext {
 	params: Params;
 	request: Request;
+	context: any;
 }
 
 export interface EndpointOutput {

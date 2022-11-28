@@ -194,6 +194,7 @@ export async function render(
 		site: astroConfig.site ? new URL(astroConfig.base, astroConfig.site).toString() : undefined,
 		ssr: astroConfig.output === 'server',
 		streaming: true,
+		context: null,
 	});
 
 	return response;

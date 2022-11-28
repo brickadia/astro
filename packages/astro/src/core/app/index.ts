@@ -66,7 +66,7 @@ export class App {
 			return undefined;
 		}
 	}
-	async render(request: Request, routeData?: RouteData): Promise<Response> {
+	async render(request: Request, routeData?: RouteData, context?: any): Promise<Response> {
 		let defaultStatus = 200;
 		if (!routeData) {
 			routeData = this.match(request);
@@ -90,7 +90,7 @@ export class App {
 		let mod = this.#manifest.pageMap.get(routeData.component)!;
 
 		if (routeData.type === 'page') {
-			let response = await this.#renderPage(request, routeData, mod, defaultStatus);
+			let response = await this.#renderPage(request, routeData, mod, context, defaultStatus);
 
 			// If there was a 500 error, try sending the 500 page.
 			if (response.status === 500) {
@@ -102,6 +102,7 @@ export class App {
 							request,
 							fiveHundredRouteData,
 							mod,
+							context,
 							500
 						);
 						return fiveHundredResponse;
@@ -120,6 +121,7 @@ export class App {
 		request: Request,
 		routeData: RouteData,
 		mod: ComponentInstance,
+		context?: any,
 		status = 200
 	): Promise<Response> {
 		const url = new URL(request.url);
@@ -168,6 +170,7 @@ export class App {
 				site: this.#manifest.site,
 				ssr: true,
 				request,
+				context,
 				streaming: this.#streaming,
 				status,
 			});
@@ -186,6 +189,7 @@ export class App {
 		request: Request,
 		routeData: RouteData,
 		mod: ComponentInstance,
+		context?: any,
 		status = 200
 	): Promise<Response> {
 		const url = new URL(request.url);
@@ -198,6 +202,7 @@ export class App {
 			route: routeData,
 			routeCache: this.#routeCache,
 			ssr: true,
+			context,
 			status,
 		});
 

@@ -42,6 +42,7 @@ export interface CreateResultArgs {
 	scripts?: Set<SSRElement>;
 	styles?: Set<SSRElement>;
 	request: Request;
+	context: any;
 	status: number;
 }
 
@@ -122,7 +123,7 @@ class Slots {
 let renderMarkdown: any = null;
 
 export function createResult(args: CreateResultArgs): SSRResult {
-	const { markdown, params, pathname, props: pageProps, renderers, request, resolve } = args;
+	const { markdown, params, pathname, props: pageProps, renderers, request, resolve, context } = args;
 
 	const url = new URL(request.url);
 	const headers = new Headers();
@@ -224,6 +225,7 @@ ${extra}`
 					return '';
 				},
 				response,
+				context,
 				slots: astroSlots,
 			} as unknown as AstroGlobal;
 

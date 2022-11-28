@@ -85,6 +85,7 @@ export interface RenderOptions {
 	ssr: boolean;
 	streaming: boolean;
 	request: Request;
+	context: any;
 	status?: number;
 }
 
@@ -108,6 +109,7 @@ export async function render(opts: RenderOptions): Promise<Response> {
 		site,
 		ssr,
 		streaming,
+		context,
 		status = 200,
 	} = opts;
 
@@ -150,6 +152,7 @@ export async function render(opts: RenderOptions): Promise<Response> {
 		scripts,
 		ssr,
 		streaming,
+		context,
 		status,
 	});
 

@@ -28,7 +28,7 @@ export class NodeApp extends App {
 	match(req: IncomingMessage | Request, opts: MatchOptions = {}) {
 		return super.match(req instanceof Request ? req : createRequestFromNodeRequest(req), opts);
 	}
-	render(req: IncomingMessage | Request, routeData?: RouteData) {
+	render(req: IncomingMessage | Request, routeData?: RouteData, context?: any) {
 		if ('on' in req) {
 			let body = Buffer.from([]);
 			let reqBodyComplete = new Promise((resolve, reject) => {
@@ -46,13 +46,15 @@ export class NodeApp extends App {
 			return reqBodyComplete.then(() => {
 				return super.render(
 					req instanceof Request ? req : createRequestFromNodeRequest(req, body),
-					routeData
+					routeData,
+					context
 				);
 			});
 		}
 		return super.render(
 			req instanceof Request ? req : createRequestFromNodeRequest(req),
-			routeData
+			routeData,
+			context
 		);
 	}
 }

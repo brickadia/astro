@@ -14,6 +14,7 @@ export type EndpointOptions = Pick<
 	| 'route'
 	| 'site'
 	| 'ssr'
+	| 'context'
 	| 'status'
 >;
 
@@ -31,6 +32,7 @@ export async function call(
 	mod: EndpointHandler,
 	opts: EndpointOptions
 ): Promise<EndpointCallResult> {
+	const context = opts.context;
 	const paramsAndPropsResp = await getParamsAndProps({ ...opts, mod: mod as any });
 
 	if (paramsAndPropsResp === GetParamsAndPropsError.NoMatchingStaticPath) {
@@ -40,7 +42,7 @@ export async function call(
 	}
 	const [params] = paramsAndPropsResp;
 
-	const response = await renderEndpoint(mod, opts.request, params);
+	const response = await renderEndpoint(mod, opts.request, params, context);
 
 	if (response instanceof Response) {
 		return {
