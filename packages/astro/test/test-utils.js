@@ -2,13 +2,15 @@ import { execa } from 'execa';
 import { polyfill } from '@astrojs/webapi';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { loadConfig } from '../dist/core/config.js';
+import { loadConfig } from '../dist/core/config/config.js';
+import { createSettings } from '../dist/core/config/index.js';
 import dev from '../dist/core/dev/index.js';
 import build from '../dist/core/build/index.js';
 import preview from '../dist/core/preview/index.js';
 import { nodeLogDestination } from '../dist/core/logger/node.js';
 import os from 'os';
 import stripAnsi from 'strip-ansi';
+import fastGlob from 'fast-glob';
 
 // polyfill WebAPIs to globalThis for Node v12, Node v14, and Node v16
 polyfill(globalThis, {
@@ -17,7 +19,7 @@ polyfill(globalThis, {
 
 /**
  * @typedef {import('node-fetch').Response} Response
- * @typedef {import('../src/core/dev/index').DevServer} DevServer
+ * @typedef {import('../src/core/dev/dev').DedvServer} DevServer
  * @typedef {import('../src/@types/astro').AstroConfig} AstroConfig
  * @typedef {import('../src/core/preview/index').PreviewServer} PreviewServer
  * @typedef {import('../src/core/app/index').App} App
@@ -26,16 +28,23 @@ polyfill(globalThis, {
  * @typedef {Object} Fixture
  * @property {typeof build} build
  * @property {(url: string) => string} resolveUrl
- * @property {(url: string, opts: any) => Promise<Response>} fetch
+ * @property {(url: string, opts: Parameters<typeof fetch>[1]) => Promise<Response>} fetch
  * @property {(path: string) => Promise<string>} readFile
  * @property {(path: string, updater: (content: string) => string) => Promise<void>} writeFile
  * @property {(path: string) => Promise<string[]>} readdir
+ * @property {(pattern: string) => Promise<string[]>} glob
  * @property {() => Promise<DevServer>} startDevServer
  * @property {() => Promise<PreviewServer>} preview
  * @property {() => Promise<void>} clean
  * @property {() => Promise<App>} loadTestAdapterApp
  * @property {() => Promise<void>} onNextChange
  */
+
+/** @type {import('../src/core/logger/core').LogOptions} */
+export const defaultLogging = {
+	dest: nodeLogDestination,
+	level: 'error',
+};
 
 /**
  * Load Astro fixture
@@ -61,6 +70,14 @@ export async function loadFixture(inlineConfig) {
 	if (!inlineConfig || !inlineConfig.root)
 		throw new Error("Must provide { root: './fixtures/...' }");
 
+	// Compatible with different Node versions (https://vitejs.dev/guide/migration.html#dev-server-changes)
+	// TODO: Remove this to test in Node >= 17 where the dns resolver is verbatim
+	if (!inlineConfig?.server) {
+		inlineConfig.server = {
+			host: '127.0.0.1',
+		};
+	}
+
 	// load config
 	let cwd = inlineConfig.root;
 	delete inlineConfig.root;
@@ -73,10 +90,7 @@ export async function loadFixture(inlineConfig) {
 	}
 
 	/** @type {import('../src/core/logger/core').LogOptions} */
-	const logging = {
-		dest: nodeLogDestination,
-		level: 'error',
-	};
+	const logging = defaultLogging;
 
 	// Load the config.
 	let config = await loadConfig({ cwd: fileURLToPath(cwd), logging });
@@ -89,10 +103,11 @@ export async function loadFixture(inlineConfig) {
 	if (inlineConfig.base && !inlineConfig.base.endsWith('/')) {
 		config.base = inlineConfig.base + '/';
 	}
+	let settings = createSettings(config, fileURLToPath(cwd));
 	if (config.integrations.find((integration) => integration.name === '@astrojs/mdx')) {
 		// Enable default JSX integration. It needs to come first, so unshift rather than push!
 		const { default: jsxRenderer } = await import('astro/jsx/renderer.js');
-		config._ctx.renderers.unshift(jsxRenderer);
+		settings.renderers.unshift(jsxRenderer);
 	}
 
 	/** @type {import('@astrojs/telemetry').AstroTelemetry} */
@@ -131,9 +146,9 @@ export async function loadFixture(inlineConfig) {
 	let devServer;
 
 	return {
-		build: (opts = {}) => build(config, { logging, telemetry, ...opts }),
+		build: (opts = {}) => build(settings, { logging, telemetry, ...opts }),
 		startDevServer: async (opts = {}) => {
-			devServer = await dev(config, { logging, telemetry, ...opts });
+			devServer = await dev(settings, { logging, telemetry, ...opts });
 			config.server.port = devServer.address.port; // update port
 			return devServer;
 		},
@@ -141,12 +156,17 @@ export async function loadFixture(inlineConfig) {
 		resolveUrl,
 		fetch: (url, init) => fetch(resolveUrl(url), init),
 		preview: async (opts = {}) => {
-			const previewServer = await preview(config, { logging, telemetry, ...opts });
+			const previewServer = await preview(settings, { logging, telemetry, ...opts });
 			return previewServer;
 		},
-		readFile: (filePath) =>
-			fs.promises.readFile(new URL(filePath.replace(/^\//, ''), config.outDir), 'utf8'),
+		pathExists: (p) => fs.existsSync(new URL(p.replace(/^\//, ''), config.outDir)),
+		readFile: (filePath, encoding) =>
+			fs.promises.readFile(new URL(filePath.replace(/^\//, ''), config.outDir), encoding ?? 'utf8'),
 		readdir: (fp) => fs.promises.readdir(new URL(fp.replace(/^\//, ''), config.outDir)),
+		glob: (p) =>
+			fastGlob(p, {
+				cwd: fileURLToPath(config.outDir),
+			}),
 		clean: async () => {
 			await fs.promises.rm(config.outDir, { maxRetries: 10, recursive: true, force: true });
 		},

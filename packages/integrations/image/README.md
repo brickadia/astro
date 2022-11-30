@@ -18,30 +18,43 @@ This **[Astro integration][astro-integration]** makes it easy to optimize images
 
 Images play a big role in overall site performance and usability. Serving properly sized images makes all the difference but is often tricky to automate.
 
-This integration provides `<Image />` and `<Picture>` components as well as a basic image transformer powered by [sharp](https://sharp.pixelplumbing.com/), with full support for static sites and server-side rendering. The built-in `sharp` transformer is also replacable, opening the door for future integrations that work with your favorite hosted image service.
+This integration provides `<Image />` and `<Picture>` components as well as a basic image transformer, with full support for static sites and server-side rendering. The built-in image transformer is also replaceable, opening the door for future integrations that work with your favorite hosted image service.
 
 ## Installation
 
+Along with our integration, we recommend installing [sharp](https://sharp.pixelplumbing.com/) when appropriate. 
 
- ### Quick Install
-  
+The `@astrojs/image` default image transformer is based on [Squoosh](https://github.com/GoogleChromeLabs/squoosh) and uses WebAssembly libraries to support most deployment environments, including those that do not support sharp, such as StackBlitz.
+
+For faster builds and more fine-grained control of image transformations, install sharp in addition to `@astrojs/image` if
+- You are building a static site with Astro.
+- You are using an SSR deployment host that supports NodeJS using `@astrojs/netlify/functions`, `@astrojs/vercel/serverless` or `@astrojs/node`.
+
+
+Note that `@astrojs/image` is not currently supported on
+- Cloudflare SSR
+- `@astrojs/deno`
+- `@astrojs/netlify/edge-functions`
+- `@astrojs/vercel/edge`
+
+
+### Quick Install
+
 The `astro add` command-line tool automates the installation for you. Run one of the following commands in a new terminal window. (If you aren't sure which package manager you're using, run the first command.) Then, follow the prompts, and type "y" in the terminal (meaning "yes") for each one.
-   
+
 ```sh
 # Using NPM
-npm run astro add image
+npx astro add image
 # Using Yarn
 yarn astro add image
 # Using PNPM
 pnpm astro add image
 ```
-  
-Then, restart the dev server by typing `CTRL-C` and then `npm run astro dev` in the terminal window that was running Astro.
-  
-Because this command is new, it might not properly set things up. If that happens, [feel free to log an issue on our GitHub](https://github.com/withastro/astro/issues) and try the manual installation steps below.
+
+If you run into any issues, [feel free to report them to us on GitHub](https://github.com/withastro/astro/issues) and try the manual installation steps below.
 
  ### Manual Install
-  
+
 First, install the `@astrojs/image` package using your package manager. If you're using npm or aren't sure, run this in the terminal:
 ```sh
 npm install @astrojs/image
@@ -57,8 +70,29 @@ export default {
   // ...
   integrations: [image()],
 }
-``` 
-Then, restart the dev server.
+```
+
+### Installing `sharp` (optional)
+
+First, install the `sharp` package using your package manager. If you're using npm or aren't sure, run this in the terminal:
+
+```sh
+npm install sharp
+```
+
+Then, update the integration in your `astro.config.*` file to use the built-in `sharp` image transformer.
+
+```js ins={2,7}
+// astro.config.mjs
+import image from '@astrojs/image';
+
+export default {
+  // ...
+  integrations: [image({
+    serviceEntryPoint: '@astrojs/image/sharp'
+  })],
+}
+```
 
 ### Update `env.d.ts`
 
@@ -88,7 +122,11 @@ import { Image, Picture } from '@astrojs/image/components';
 ---
 ```
 
-The included `sharp` transformer supports resizing images and encoding them to different image formats. Third-party image services will be able to add support for custom transformations as well (ex: `blur`, `filter`, `rotate`, etc).
+The included image transformers support resizing images and encoding them to different image formats. Third-party image services will be able to add support for custom transformations as well (ex: `blur`, `filter`, `rotate`, etc).
+
+Astro’s `<Image />` and `<Picture />` components require the `alt` attribute, which provides descriptive text for images. A warning will be logged if alt text is missing, and a future release of the integration will throw an error if no alt text is provided.
+
+If the image is merely decorative (i.e. doesn’t contribute to the understanding of the page), set `alt=""` so that the image is properly understood and ignored by screen readers.
 
 ### `<Image />`
 
@@ -106,7 +144,23 @@ In addition to the component-specific properties, any valid HTML attribute for t
 
 Source for the original image file.
 
-For images in your project's repository, use the `src` relative to the `public` directory. For remote images, provide the full URL.
+For images located in your project's `src`: use the file path relative to the `src` directory. (e.g. `src="../assets/source-pic.png"`)
+
+For images located in your `public` directory: use the URL path relative to the `public` directory. (e.g. `src="/images/public-image.jpg"`)
+
+For remote images, provide the full URL. (e.g. `src="https://astro.build/assets/blog/astro-1-release-update.avif"`)
+
+#### alt
+
+<p>
+
+**Type:** `string`<br>
+**Required:** `true`
+</p>
+
+Defines an alternative text description of the image.
+
+Set to an empty string (`alt=""`) if the image is not a key part of the content (e.g. it's decoration or a tracking pixel).
 
 #### format
 
@@ -118,6 +172,8 @@ For images in your project's repository, use the `src` relative to the `public` 
 
 The output format to be used in the optimized image. The original image format will be used if `format` is not provided.
 
+This property is required for remote images only, because the original format cannot be inferred.
+
 #### quality
 
 <p>
@@ -126,7 +182,7 @@ The output format to be used in the optimized image. The original image format w
 **Default:** `undefined`
 </p>
 
-The compression quality used during optimization. The image service will use a default quality if not provided.
+The compression quality used during optimization. The image service will use its own default quality depending on the image format if not provided.
 
 #### width
 
@@ -170,7 +226,57 @@ A `string` can be provided in the form of `{width}:{height}`, ex: `16:9` or `3:4
 
 A `number` can also be provided, useful when the aspect ratio is calculated at build time. This can be an inline number such as `1.777` or inlined as a JSX expression like `aspectRatio={16/9}`.
 
-### `<Picture /`>
+#### background
+
+<p>
+
+**Type:** `ColorDefinition`<br>
+**Default:** `undefined`
+</p>
+
+> This is not supported by the default Squoosh service. See the [installation section](#installing-sharp-optional) for details on using the `sharp` service instead.
+
+The background color is used to fill the remaining background when using `contain` for the `fit` property.
+
+The background color is also used for replacing the alpha channel with `sharp`'s `flatten` method. In case the output format
+doesn't support transparency (i.e. `jpeg`), it's advisable to include a background color, otherwise black will be used
+as default replacement for transparent pixels.
+
+The parameter accepts a `string` as value.
+
+The parameter can be a [named HTML color](https://www.w3schools.com/tags/ref_colornames.asp), a hexadecimal
+color representation with 3 or 6 hexadecimal characters in the form `#123[abc]`, an RGB definition in the form
+`rgb(100,100,100)`, an RGBA definition in the form `rgba(100,100,100, 0.5)`.
+
+#### fit
+
+<p>
+
+**Type:** `'cover' | 'contain' | 'fill' | 'inside' | 'outside'` <br>
+**Default:** `'cover'`
+</p>
+
+> This is not supported by the default Squoosh service. See the [installation section](#installing-sharp-optional) for details on using the `sharp` service instead.
+
+How the image should be resized to fit both `height` and `width`.
+
+#### position
+
+<p>
+
+**Type:** `'top' | 'right top' | 'right' | 'right bottom' | 'bottom' | 'left bottom' | 'left' | 'left top' | 'north' | 'northeast' | 'east' | 'southeast' | 'south' | 'southwest' | 'west' | 'northwest' | 'center' | 'centre' | 'cover' | 'entropy' | 'attention'` <br>
+**Default:** `'centre'`
+</p>
+
+> This is not supported by the default Squoosh service. See the [installation section](#installing-sharp-optional) for details on using the `sharp` service instead.
+
+Position of the crop when fit is `cover` or `contain`.
+
+### `<Picture />`
+
+The built-in `<Picture />` component is used to create an optimized `<picture />` for both remote images hosted on other domains as well as local images imported from your project's `src` directory.
+
+In addition to the component-specific properties, any valid HTML attribute for the `<img />` included in the `<Picture />` component will be included in the built `<img />`.
 
 #### src
 
@@ -182,17 +288,23 @@ A `number` can also be provided, useful when the aspect ratio is calculated at b
 
 Source for the original image file.
 
-For images in your project's repository, use the `src` relative to the `public` directory. For remote images, provide the full URL.
+For images located in your project's `src`: use the file path relative to the `src` directory. (e.g. `src="../assets/source-pic.png"`)
+
+For images located in your `public` directory: use the URL path relative to the `public` directory. (e.g. `src="/images/public-image.jpg"`)
+
+For remote images, provide the full URL. (e.g. `src="https://astro.build/assets/blog/astro-1-release-update.avif"`)
 
 #### alt
 
 <p>
 
 **Type:** `string`<br>
-**Default:** `undefined`
+**Required:** `true`
 </p>
 
-If provided, the `alt` string will be included on the built `<img />` element.
+Defines an alternative text description of the image.
+
+Set to an empty string (`alt=""`) if the image is not a key part of the content (e.g. it's decoration or a tracking pixel).
 
 #### sizes
 
@@ -235,6 +347,8 @@ A `string` can be provided in the form of `{width}:{height}`, ex: `16:9` or `3:4
 
 A `number` can also be provided, useful when the aspect ratio is calculated at build time. This can be an inline number such as `1.777` or inlined as a JSX expression like `aspectRatio={16/9}`.
 
+For remote images only, `aspectRatio` is required to ensure the correct `height` can be calculated at build time.
+
 #### formats
 
 <p>
@@ -244,6 +358,54 @@ A `number` can also be provided, useful when the aspect ratio is calculated at b
 </p>
 
 The output formats to be used in the optimized image. If not provided, `webp` and `avif` will be used in addition to the original image format.
+
+For remote images, the original image format is unknown. If not provided, only `webp` and `avif` will be used.
+
+#### background
+
+<p>
+
+**Type:** `ColorDefinition`<br>
+**Default:** `undefined`
+</p>
+
+> This is not supported by the default Squoosh service. See the [installation section](#installing-sharp-optional) for details on using the `sharp` service instead.
+
+The background color to use for replacing the alpha channel with `sharp`'s `flatten` method. In case the output format
+doesn't support transparency (i.e. `jpeg`), it's advisable to include a background color, otherwise black will be used
+as default replacement for transparent pixels.
+
+The parameter accepts a `string` as value.
+
+The parameter can be a [named HTML color](https://www.w3schools.com/tags/ref_colornames.asp), a hexadecimal
+color representation with 3 or 6 hexadecimal characters in the form `#123[abc]`, or an RGB definition in the form
+`rgb(100,100,100)`.
+
+#### fit
+
+<p>
+
+**Type:** `'cover' | 'contain' | 'fill' | 'inside' | 'outside'` <br>
+**Default:** `'cover'`
+</p>
+
+> This is not supported by the default Squoosh service. See the [installation section](#installing-sharp-optional) for details on using the `sharp` service instead.
+
+How the image should be resized to fit both `height` and `width`.
+
+#### position
+
+<p>
+
+**Type:** `'top' | 'right top' | 'right' | 'right bottom' | 'bottom' | 'left bottom' | 'left' | 'left top' |
+  'north' | 'northeast' | 'east' | 'southeast' | 'south' | 'southwest' | 'west' | 'northwest' |
+  'center' | 'centre' | 'cover' | 'entropy' | 'attention'` <br>
+**Default:** `'centre'`
+</p>
+
+> This is not supported by the default Squoosh service. See the [installation section](#installing-sharp-optional) for details on using the `sharp` service instead.
+
+Position of the crop when fit is `cover` or `contain`.
 
 ### `getImage`
 
@@ -257,12 +419,12 @@ This can be helpful if you need to add preload links to a page's `<head>`.
 ---
 import { getImage } from '@astrojs/image';
 
-const { src } = await getImage('../assets/hero.png');
+const { src } = await getImage({src: '../assets/hero.png'});
 ---
 
 <html>
   <head>
-    <link rel="preload" as="image" href={src}>
+    <link rel="preload" as="image" href={src} alt="alt text">
   </head>
 </html>
 ```
@@ -277,12 +439,12 @@ This helper takes in an object with the same properties as the `<Picture />` com
 
 The integration can be configured to run with a different image service, either a hosted image service or a full image transformer that runs locally in your build or SSR deployment.
 
-> During development, local images may not have been published yet and would not be available to hosted image services. Local images will always use the built-in `sharp` service when using `astro dev`.
+> During development, local images may not have been published yet and would not be available to hosted image services. Local images will always use the built-in image service when using `astro dev`.
 
 
  ### config.serviceEntryPoint
-  
-The `serviceEntryPoint` should resolve to the image service installed from NPM. The default entry point is `@astrojs/image/sharp`, which resolves to the entry point exported from this integration's `package.json`.
+
+The `serviceEntryPoint` should resolve to the image service installed from NPM. The default entry point is `@astrojs/image/squoosh`, which resolves to the entry point exported from this integration's `package.json`.
 
 ```js
 // astro.config.mjs
@@ -313,11 +475,32 @@ export default {
 }
 ```
 
+### config.cacheDir
+
+During static builds, the integration will cache transformed images to avoid rebuilding the same image for every build. This can be particularly helpful if you are using a hosting service that allows you to cache build assets for future deployments.
+
+Local images will be cached for 1 year and invalidated when the original image file is changed. Remote images will be cached based on the `fetch()` response's cache headers, similar to how a CDN would manage the cache.
+
+By default, transformed images will be cached to `./node_modules/.astro/image`. This can be configured in the integration's config options.
+
+```js
+export default defineConfig({
+	integrations: [image({
+    // may be useful if your hosting provider allows caching between CI builds
+    cacheDir: "./.cache/image"
+  })]
+});
+```
+
+Caching can also be disabled by using `cacheDir: false`.
+
 ## Examples
 
 ### Local images
-  
-Image files in your project's `src` directory can be imported in frontmatter and passed directly to the `<Image />` component. All other properties are optional and will default to the original image file's properties if not provided.
+
+Image files in your project's `src/` directory can be imported in frontmatter and passed directly to the `<Image />` component as the `src=` attribute value. `alt` is also required. 
+
+All other properties are optional and will default to the original image file's properties if not provided.
 
 ```astro
 ---
@@ -326,23 +509,41 @@ import heroImage from '../assets/hero.png';
 ---
 
 // optimized image, keeping the original width, height, and image format
-<Image src={heroImage} />
+<Image src={heroImage} alt="descriptive text" />
 
 // height will be recalculated to match the original aspect ratio
-<Image src={heroImage} width={300} />
+<Image src={heroImage} width={300} alt="descriptive text" />
 
 // cropping to a specific width and height
-<Image src={heroImage} width={300} height={600} />
+<Image src={heroImage} width={300} height={600} alt="descriptive text" />
 
 // cropping to a specific aspect ratio and converting to an avif format
-<Image src={heroImage} aspectRatio="16:9" format="avif" />
+<Image src={heroImage} aspectRatio="16:9" format="avif" alt="descriptive text" />
 
 // image imports can also be inlined directly
-<Image src={import('../assets/hero.png')} />
+<Image src={import('../assets/hero.png')} alt="descriptive text" />
+```
+
+#### Images in `/public`
+
+The `<Image />` component can also be used with images stored in the `public/` directory and the `src=` attribute is relative to the public folder. It will be treated as a remote image, which requires either both `width` and `height`, or one dimension and an `aspectRatio` attribute.
+
+Your original image will be copied unprocessed to the build folder, like all files located in public/, and Astro’s image integration will also return optimized versions of the image.
+
+For example, use an image located at `public/social.png` in either static or SSR builds like so:
+
+```astro title="src/pages/page.astro"
+---
+import { Image } from '@astrojs/image/components';
+import socialImage from '/social.png';
+---
+// In static builds: the image will be built and optimized to `/dist`.
+// In SSR builds: the image will be optimized by the server when requested by a browser.
+<Image src={socialImage} width={1280} aspectRatio="16:9" alt="descriptive text" />
 ```
 
 ### Remote images
-  
+
 Remote images can be transformed with the `<Image />` component. The `<Image />` component needs to know the final dimensions for the `<img />` element to avoid content layout shifts. For remote images, this means you must either provide `width` and `height`, or one of the dimensions plus the required `aspectRatio`.
 
 ```astro
@@ -353,20 +554,20 @@ const imageUrl = 'https://www.google.com/images/branding/googlelogo/2x/googlelog
 ---
 
 // cropping to a specific width and height
-<Image src={imageUrl} width={544} height={184} />
+<Image src={imageUrl} width={544} height={184} alt="descriptive text" />
 
 // height will be recalculated to match the aspect ratio
-<Image src={imageUrl} width={300} aspectRatio={16/9} />
+<Image src={imageUrl} width={300} aspectRatio={16/9} alt="descriptive text" />
 
 // cropping to a specific height and aspect ratio and converting to an avif format
-<Image src={imageUrl} height={200} aspectRatio="16:9" format="avif" />
+<Image src={imageUrl} height={200} aspectRatio="16:9" format="avif" alt="descriptive text" />
 ```
 
 ### Responsive pictures
 
 The `<Picture />` component can be used to automatically build a `<picture>` with multiple sizes and formats. Check out [MDN](https://developer.mozilla.org/en-US/docs/Learn/HTML/Multimedia_and_embedding/Responsive_images#art_direction) for a deep dive into responsive images and art direction.
 
-By default, the picture will include formats for `avif` and `webp` in addition to the image's original format.
+By default, the picture will include formats for `avif` and `webp`. For local images only, the image's original format will also be included.
 
 For remote images, an `aspectRatio` is required to ensure the correct `height` can be calculated at build time.
 
@@ -379,22 +580,21 @@ const imageUrl = 'https://www.google.com/images/branding/googlelogo/2x/googlelog
 ---
 
 // Local image with multiple sizes
-<Picture src={hero} widths={[200, 400, 800]} sizes="(max-width: 800px) 100vw, 800px" alt="My hero image" />
+<Picture src={hero} widths={[200, 400, 800]} sizes="(max-width: 800px) 100vw, 800px" alt="descriptive text" />
 
 // Remote image (aspect ratio is required)
-<Picture src={imageUrl} widths={[200, 400, 800]} aspectRatio="4:3" sizes="(max-width: 800px) 100vw, 800px" alt="My hero image" />
+<Picture src={imageUrl} widths={[200, 400, 800]} aspectRatio="4:3" sizes="(max-width: 800px) 100vw, 800px" alt="descriptive text" />
 
 // Inlined imports are supported
-<Picture src={import("../assets/hero.png")} widths={[200, 400, 800]} sizes="(max-width: 800px) 100vw, 800px" alt="My hero image" />
+<Picture src={import("../assets/hero.png")} widths={[200, 400, 800]} sizes="(max-width: 800px) 100vw, 800px" alt="descriptive text" />
 ```
 
 ## Troubleshooting
-- If your installation doesn't seem to be working, make sure to restart the dev server.
-- If you edit and save a file and don't see your site update accordingly, try refreshing the page.
+- If your installation doesn't seem to be working, try restarting the dev server.
 - If you edit and save a file and don't see your site update accordingly, try refreshing the page.
 - If refreshing the page doesn't update your preview, or if a new installation doesn't seem to be working, then restart the dev server.
 
-For help, check out the `#support-threads` channel on [Discord](https://astro.build/chat). Our friendly Support Squad members are here to help!
+For help, check out the `#support` channel on [Discord](https://astro.build/chat). Our friendly Support Squad members are here to help!
 
 You can also check our [Astro Integration Documentation][astro-integration] for more on integrations.
 

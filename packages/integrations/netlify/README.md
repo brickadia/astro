@@ -2,6 +2,8 @@
 
 This adapter allows Astro to deploy your SSR site to [Netlify](https://www.netlify.com/).
 
+Learn how to deploy your Astro site in our [Netlify deployment guide](https://docs.astro.build/en/guides/deploy/netlify/).
+
 - <strong>[Why Astro Netlify](#why-astro-netlify)</strong>
 - <strong>[Installation](#installation)</strong>
 - <strong>[Usage](#usage)</strong>
@@ -23,39 +25,55 @@ If you wish to [use server-side rendering (SSR)](https://docs.astro.build/en/gui
 
 ## Installation
 
-First, install the `@astrojs/netlify` package using your package manager. If you're using npm or aren't sure, run this in the terminal:
+Add the Netlify adapter to enable SSR in your Astro project with the following `astro add` command. This will install the adapter and make the appropriate changes to your `astro.config.mjs` file in one step.
+
 ```sh
-npm install @astrojs/netlify
+# Using NPM
+npx astro add netlify
+# Using Yarn
+yarn astro add netlify
+# Using PNPM
+pnpm astro add netlify
 ```
 
-Then, install this adapter in your `astro.config.*` file using the `adapter` property. Note: there are two different adapters, one for Netlify Functions and one for Edge Functions. See [Edge Functions](#edge-functions) below on importing the latter.
+If you prefer to install the adapter manually instead, complete the following two steps:
 
-__`astro.config.mjs`__
+1. Install the Netlify adapter to your project’s dependencies using your preferred package manager. If you’re using npm or aren’t sure, run this in the terminal:
 
-```js
-import { defineConfig } from 'astro/config';
-import netlify from '@astrojs/netlify/functions';
+    ```bash
+      npm install @astrojs/netlify
+    ```
 
-export default defineConfig({
-  output: 'server',
-	adapter: netlify(),
-});
-```
+1. Add two new lines to your `astro.config.mjs` project configuration file.
+
+    ```js ins={3, 6-7}
+    // astro.config.mjs
+    import { defineConfig } from 'astro/config';
+    import netlify from '@astrojs/netlify/functions';
+
+    export default defineConfig({
+      output: 'server',
+      adapter: netlify(),
+    });
+    ```
 
 ### Edge Functions
 
-Netlify has two serverless platforms, Netlify Functions and Netlify Edge Functions. With Edge Functions your code is distributed closer to your users, lowering latency. You can use Edge Functions by changing the import in your astro configuration file:
+Netlify has two serverless platforms, Netlify Functions and [Netlify's experimental Edge Functions](https://docs.netlify.com/netlify-labs/experimental-features/edge-functions/#app). With Edge Functions your code is distributed closer to your users, lowering latency.
 
-```diff
+To deploy with Edge Functions, use `netlify/edge-functions` in the Astro config file instead of `netlify/functions`.
+
+```js ins={3}
+// astro.config.mjs
 import { defineConfig } from 'astro/config';
-- import netlify from '@astrojs/netlify/functions';
-+ import netlify from '@astrojs/netlify/edge-functions';
+import netlify from '@astrojs/netlify/edge-functions';
 
 export default defineConfig({
   output: 'server',
-	adapter: netlify(),
+  adapter: netlify(),
 });
 ```
+
 ## Usage
 
 [Read the full deployment guide here.](https://docs.astro.build/en/guides/deploy/netlify/)
@@ -80,6 +98,7 @@ To configure this adapter, pass an object to the `netlify()` function call in `a
 We build to the `dist` directory at the base of your project. To change this, use the `dist` option:
 
 ```js
+// astro.config.mjs
 import { defineConfig } from 'astro/config';
 import netlify from '@astrojs/netlify/functions';
 
@@ -93,7 +112,7 @@ export default defineConfig({
 
 And then point to the dist in your `netlify.toml`:
 
-```toml
+```toml title="netlify.toml"
 [functions]
 directory = "dist/functions"
 ```
@@ -106,7 +125,9 @@ Netlify Functions requires binary data in the `body` to be base64 encoded. The `
 
 We check for common mime types for audio, image, and video files. To include specific mime types that should be treated as binary data, include the `binaryMediaTypes` option with a list of binary mime types.
 
-```js
+```js {12}
+// src/pages/image.jpg.ts
+
 import fs from 'node:fs';
 
 export function get() {
@@ -130,7 +151,7 @@ export function get() {
 
 ## Troubleshooting
 
-For help, check out the `#support-threads` channel on [Discord](https://astro.build/chat). Our friendly Support Squad members are here to help!
+For help, check out the `#support` channel on [Discord](https://astro.build/chat). Our friendly Support Squad members are here to help!
 
 You can also check our [Astro Integration Documentation][astro-integration] for more on integrations.
 

@@ -48,6 +48,7 @@ Join us on [Discord](https://astro.build/chat) to meet other maintainers. We'll 
 | [@astrojs/lit](packages/integrations/lit)               | [![astro version](https://img.shields.io/npm/v/@astrojs/lit.svg?label=%20)](packages/integrations/lit/CHANGELOG.md)               |
 | [@astrojs/deno](packages/integrations/deno)             | [![astro version](https://img.shields.io/npm/v/@astrojs/deno.svg?label=%20)](packages/integrations/deno/CHANGELOG.md)             |
 | [@astrojs/netlify](packages/integrations/netlify)       | [![astro version](https://img.shields.io/npm/v/@astrojs/netlify.svg?label=%20)](packages/integrations/netlify/CHANGELOG.md)       |
+| [@astrojs/node](packages/integrations/node)       | [![astro version](https://img.shields.io/npm/v/@astrojs/node.svg?label=%20)](packages/integrations/node/CHANGELOG.md)       |
 | [@astrojs/vercel](packages/integrations/vercel)         | [![astro version](https://img.shields.io/npm/v/@astrojs/vercel.svg?label=%20)](packages/integrations/vercel/CHANGELOG.md)         |
 | [@astrojs/cloudflare](packages/integrations/cloudflare) | [![astro version](https://img.shields.io/npm/v/@astrojs/cloudflare.svg?label=%20)](packages/integrations/cloudflare/CHANGELOG.md) |
 | [@astrojs/partytown](packages/integrations/partytown)   | [![astro version](https://img.shields.io/npm/v/@astrojs/partytown.svg?label=%20)](packages/integrations/partytown/CHANGELOG.md)   |
@@ -55,6 +56,9 @@ Join us on [Discord](https://astro.build/chat) to meet other maintainers. We'll 
 | [@astrojs/tailwind](packages/integrations/tailwind)     | [![astro version](https://img.shields.io/npm/v/@astrojs/tailwind.svg?label=%20)](packages/integrations/tailwind/CHANGELOG.md)     |
 | [@astrojs/turbolinks](packages/integrations/turbolinks) | [![astro version](https://img.shields.io/npm/v/@astrojs/turbolinks.svg?label=%20)](packages/integrations/turbolinks/CHANGELOG.md) |
 | [@astrojs/alpinejs](packages/integrations/alpinejs) | [![astro version](https://img.shields.io/npm/v/@astrojs/alpinejs.svg?label=%20)](packages/integrations/alpinejs/CHANGELOG.md) |
+| [@astrojs/image](packages/integrations/image) | [![astro version](https://img.shields.io/npm/v/@astrojs/image.svg?label=%20)](packages/integrations/image/CHANGELOG.md) |
+| [@astrojs/mdx](packages/integrations/mdx) | [![astro version](https://img.shields.io/npm/v/@astrojs/mdx.svg?label=%20)](packages/integrations/mdx/CHANGELOG.md) |
+| [@astrojs/prefetch](packages/integrations/prefetch) | [![astro version](https://img.shields.io/npm/v/@astrojs/prefetch.svg?label=%20)](packages/integrations/prefetch/CHANGELOG.md) |
 
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/6178/badge)](https://bestpractices.coreinfrastructure.org/projects/6178)
 
@@ -62,7 +66,7 @@ Several official projects are maintained outside of this repo:
 
 | Project                                                             | Repository                                                              |
 | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| [@astrojs/compiler](packages/integrations/compiler)                 | [withastro/compiler](https://github.com/withastro/compiler)             |
+| [@astrojs/compiler](https://github.com/withastro/compiler)                 | [withastro/compiler](https://github.com/withastro/compiler)             |
 | [Astro Language Tools](https://github.com/withastro/language-tools) | [withastro/language-tools](https://github.com/withastro/language-tools) |
 
 
@@ -76,54 +80,12 @@ Several official projects are maintained outside of this repo:
 
 ## Sponsors
 
-Astro is generously supported by Netlify, Vercel, and several other amazing organizations.
+Astro is generously supported by Netlify, Storyblok, and several other amazing organizations.
 
 [❤️ Sponsor Astro! ❤️](https://github.com/withastro/.github/blob/main/FUNDING.md)
 
-### Platinum Sponsors
-
-<table>
-  <tbody>
-    <tr>
-      <td align="center"><a href="https://www.netlify.com/#gh-light-mode-only" target="_blank"><img width="147" height="40" src="https://raw.githubusercontent.com/withastro/astro/main/.github/assets/netlify.svg#gh-light-mode-only" alt="Netlify" /></a><a href="https://www.netlify.com/#gh-dark-mode-only" target="_blank"><img width="147" height="40" src="https://raw.githubusercontent.com/withastro/astro/main/.github/assets/netlify-dark.svg#gh-dark-mode-only" alt="Netlify" />
-      </a></td>
-      <td align="center"><a href="https://www.vercel.com/#gh-light-mode-only" target="_blank"><img width="150" height="34" src="https://raw.githubusercontent.com/withastro/astro/main/.github/assets/vercel.svg#gh-light-mode-only" alt="Vercel" /></a><a href="https://www.vercel.com/#gh-dark-mode-only"><img width="150" height="34" src="https://raw.githubusercontent.com/withastro/astro/main/.github/assets/vercel-dark.svg#gh-dark-mode-only" alt="Vercel" />
-      </a></td>
-    </tr>
-  </tbody>
-</table>
-
-### Gold Sponsors
-
-<table>
-  <tbody>
-    <tr>
-      <td align="center">
-        <a href="https://divRIOTS.com#gh-light-mode-only" target="_blank">
-        <img width="150" height="40" src="https://raw.githubusercontent.com/withastro/astro/main/.github/assets/divriots.svg#gh-light-mode-only" alt="‹div›RIOTS" />
-        </a>
-        <a href="https://divRIOTS.com#gh-dark-mode-only" target="_blank">
-        <img width="150" height="40" src="https://raw.githubusercontent.com/withastro/astro/main/.github/assets/divriots-dark.svg#gh-dark-mode-only" alt="‹div›RIOTS" />
-        </a>
-      </td>
-      <td align="center">
-        <a href="https://stackupdigital.co.uk/#gh-light-mode-only" target="_blank">
-        <img width="162" height="40" src="https://raw.githubusercontent.com/withastro/astro/main/.github/assets/stackup.svg#gh-light-mode-only" alt="StackUp Digital" />
-        </a>
-        <a href="https://stackupdigital.co.uk/#gh-dark-mode-only" target="_blank">
-        <img width="130" height="32" src="https://raw.githubusercontent.com/withastro/astro/main/.github/assets/stackup-dark.svg#gh-dark-mode-only" alt="StackUp Digital" />
-        </a>
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-### Sponsors
-
-<table>
-  <tbody>
-    <tr>
-      <td align="center"><a href="https://sentry.io" target="_blank"><img width="147" height="40" src="https://raw.githubusercontent.com/withastro/astro/main/.github/assets/sentry.svg" alt="Sentry" /></a></td><td align="center"><a href="https://qoddi.com" target="_blank"><img width="147" height="40" src="https://devcenter.qoddi.com/wp-content/uploads/2021/11/blog-transparent-logo-1.png" alt="Qoddi App Platform" /></a></td>
-    </tr>
-  </tbody>
-</table>
+<p align="center">
+  <a target="_blank" href="https://github.com/sponsors/withastro">
+    <img alt="sponsors" src="https://astro.build/sponsors.png">
+  </a>
+</p>

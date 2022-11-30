@@ -1,4 +1,4 @@
-import type * as vite from 'vite';
+import type { ModuleLoader } from '../../module-loader/index';
 
 import path from 'path';
 import { RuntimeMode } from '../../../@types/astro.js';
@@ -9,20 +9,29 @@ import { crawlGraph } from './vite.js';
 /** Given a filePath URL, crawl Vite’s module graph to find all style imports. */
 export async function getStylesForURL(
 	filePath: URL,
-	viteServer: vite.ViteDevServer,
+	loader: ModuleLoader,
 	mode: RuntimeMode
 ): Promise<{ urls: Set<string>; stylesMap: Map<string, string> }> {
 	const importedCssUrls = new Set<string>();
 	const importedStylesMap = new Map<string, string>();
 
-	for await (const importedModule of crawlGraph(viteServer, viteID(filePath), true)) {
+	for await (const importedModule of crawlGraph(loader, viteID(filePath), true)) {
 		const ext = path.extname(importedModule.url).toLowerCase();
 		if (STYLE_EXTENSIONS.has(ext)) {
+			let ssrModule: Record<string, any>;
+			try {
+				// The SSR module is possibly not loaded. Load it if it's null.
+				ssrModule = importedModule.ssrModule ?? (await loader.import(importedModule.url));
+			} catch {
+				// The module may not be inline-able, e.g. SCSS partials. Skip it as it may already
+				// be inlined into other modules if it happens to be in the graph.
+				continue;
+			}
 			if (
 				mode === 'development' && // only inline in development
-				typeof importedModule.ssrModule?.default === 'string' // ignore JS module styles
+				typeof ssrModule?.default === 'string' // ignore JS module styles
 			) {
-				importedStylesMap.set(importedModule.url, importedModule.ssrModule.default);
+				importedStylesMap.set(importedModule.url, ssrModule.default);
 			} else {
 				// NOTE: We use the `url` property here. `id` would break Windows.
 				importedCssUrls.add(importedModule.url);

@@ -23,12 +23,12 @@ declare namespace astroHTML.JSX {
 		children?: Children;
 	}
 
-	type AstroBuiltinProps = import('./dist/@types/astro').AstroBuiltinProps;
-	type AstroBuiltinAttributes = import('./dist/@types/astro').AstroBuiltinAttributes;
-	type AstroDefineVarsAttribute = import('./dist/@types/astro').AstroDefineVarsAttribute;
-	type AstroScriptAttributes = import('./dist/@types/astro').AstroScriptAttributes &
+	type AstroBuiltinProps = import('./dist/@types/astro.js').AstroBuiltinProps;
+	type AstroBuiltinAttributes = import('./dist/@types/astro.js').AstroBuiltinAttributes;
+	type AstroDefineVarsAttribute = import('./dist/@types/astro.js').AstroDefineVarsAttribute;
+	type AstroScriptAttributes = import('./dist/@types/astro.js').AstroScriptAttributes &
 		AstroDefineVarsAttribute;
-	type AstroStyleAttributes = import('./dist/@types/astro').AstroStyleAttributes &
+	type AstroStyleAttributes = import('./dist/@types/astro.js').AstroStyleAttributes &
 		AstroDefineVarsAttribute;
 
 	// This is an unfortunate use of `any`, but unfortunately we can't make a type that works for every framework
@@ -663,6 +663,7 @@ declare namespace astroHTML.JSX {
 		allow?: string | undefined | null;
 		allowfullscreen?: boolean | string | undefined | null;
 		allowtransparency?: boolean | string | undefined | null;
+		fetchpriority?: 'auto' | 'high' | 'low' | undefined | null;
 		/** @deprecated */
 		frameborder?: number | string | undefined | null;
 		height?: number | string | undefined | null;
@@ -686,6 +687,7 @@ declare namespace astroHTML.JSX {
 		alt?: string | undefined | null;
 		crossorigin?: 'anonymous' | 'use-credentials' | '' | undefined | null;
 		decoding?: 'async' | 'auto' | 'sync' | undefined | null;
+		fetchpriority?: 'auto' | 'high' | 'low' | undefined | null;
 		height?: number | string | undefined | null;
 		loading?: 'eager' | 'lazy' | undefined | null;
 		referrerpolicy?: HTMLAttributeReferrerPolicy | undefined | null;
@@ -784,6 +786,7 @@ declare namespace astroHTML.JSX {
 		crossorigin?: boolean | string | undefined | null;
 		href?: string | URL | undefined | null;
 		hreflang?: string | undefined | null;
+		fetchpriority?: 'auto' | 'high' | 'low' | undefined | null;
 		integrity?: string | undefined | null;
 		media?: string | undefined | null;
 		imageSrcSet?: string | undefined | null;
@@ -893,6 +896,7 @@ declare namespace astroHTML.JSX {
 		charset?: string | undefined | null;
 		crossorigin?: string | undefined | null;
 		defer?: boolean | string | undefined | null;
+		fetchpriority?: 'auto' | 'high' | 'low' | undefined | null;
 		integrity?: string | undefined | null;
 		nomodule?: boolean | string | undefined | null;
 		nonce?: string | undefined | null;
@@ -1007,7 +1011,7 @@ declare namespace astroHTML.JSX {
 	//   - "string"
 	//   - union of string literals
 	interface SVGAttributes extends AriaAttributes, DOMAttributes, AstroBuiltinAttributes {
-		// Attributes which also defined in HTMLAttributes
+		// Attributes which are also defined in HTMLAttributes
 		class?: string | undefined | null;
 		color?: string | undefined | null;
 		height?: number | string | undefined | null;
@@ -1018,6 +1022,7 @@ declare namespace astroHTML.JSX {
 		method?: string | undefined | null;
 		min?: number | string | undefined | null;
 		name?: string | undefined | null;
+		slot?: string | undefined | null;
 		style?: string | Record<string, any> | undefined | null;
 		target?: string | undefined | null;
 		type?: string | undefined | null;
@@ -1287,7 +1292,7 @@ declare namespace astroHTML.JSX {
 		zoomAndPan?: string | undefined | null;
 	}
 
-	interface IntrinsicElements {
+	interface DefinedIntrinsicElements {
 		// HTML
 		a: AnchorHTMLAttributes;
 		abbr: HTMLAttributes;
@@ -1460,7 +1465,9 @@ declare namespace astroHTML.JSX {
 		tspan: SVGAttributes;
 		use: SVGAttributes;
 		view: SVGAttributes;
+	}
 
+	interface IntrinsicElements extends DefinedIntrinsicElements {
 		// Allow for arbitrary elements
 		[name: string]: { [name: string]: any };
 	}

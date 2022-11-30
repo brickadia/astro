@@ -5,7 +5,9 @@ import type {
 	GetStaticPathsResultKeyed,
 	Params,
 	RouteData,
+	RuntimeMode,
 } from '../../@types/astro';
+import { AstroError, AstroErrorData } from '../errors/index.js';
 import { debug, LogOptions, warn } from '../logger/core.js';
 
 import { stringifyParams } from '../routing/params.js';
@@ -27,39 +29,43 @@ export async function callGetStaticPaths({
 	route,
 	ssr,
 }: CallGetStaticPathsOptions): Promise<RouteCacheEntry> {
-	validateDynamicRouteModule(mod, { ssr, logging });
+	validateDynamicRouteModule(mod, { ssr, logging, route });
 	// No static paths in SSR mode. Return an empty RouteCacheEntry.
 	if (ssr) {
 		return { staticPaths: Object.assign([], { keyed: new Map() }) };
 	}
-	// Add a check here to my TypeScript happy.
+	// Add a check here to make TypeScript happy.
 	// This is already checked in validateDynamicRouteModule().
 	if (!mod.getStaticPaths) {
 		throw new Error('Unexpected Error.');
 	}
+
 	// Calculate your static paths.
 	let staticPaths: GetStaticPathsResult = [];
-	staticPaths = (
-		await mod.getStaticPaths({
-			paginate: generatePaginateFunction(route),
-			rss() {
-				throw new Error(
-					'The RSS helper has been removed from getStaticPaths! Try the new @astrojs/rss package instead. See https://docs.astro.build/en/guides/rss/'
-				);
-			},
-		})
-	).flat();
+	staticPaths = await mod.getStaticPaths({
+		paginate: generatePaginateFunction(route),
+		rss() {
+			throw new AstroError(AstroErrorData.GetStaticPathsRemovedRSSHelper);
+		},
+	});
+
+	// Flatten the array before validating the content, otherwise users using `.map` will run into errors
+	if (Array.isArray(staticPaths)) {
+		staticPaths = staticPaths.flat();
+	}
+
+	if (isValidate) {
+		validateGetStaticPathsResult(staticPaths, logging, route);
+	}
 
 	const keyedStaticPaths = staticPaths as GetStaticPathsResultKeyed;
 	keyedStaticPaths.keyed = new Map<string, GetStaticPathsItem>();
 
 	for (const sp of keyedStaticPaths) {
-		const paramsKey = stringifyParams(sp.params);
+		const paramsKey = stringifyParams(sp.params, route.component);
 		keyedStaticPaths.keyed.set(paramsKey, sp);
 	}
-	if (isValidate) {
-		validateGetStaticPathsResult(keyedStaticPaths, logging);
-	}
+
 	return {
 		staticPaths: keyedStaticPaths,
 	};
@@ -77,9 +83,11 @@ export interface RouteCacheEntry {
 export class RouteCache {
 	private logging: LogOptions;
 	private cache: Record<string, RouteCacheEntry> = {};
+	private mode: RuntimeMode;
 
-	constructor(logging: LogOptions) {
+	constructor(logging: LogOptions, mode: RuntimeMode = 'production') {
 		this.logging = logging;
+		this.mode = mode;
 	}
 
 	/** Clear the cache. */
@@ -91,7 +99,7 @@ export class RouteCache {
 		// NOTE: This shouldn't be called on an already-cached component.
 		// Warn here so that an unexpected double-call of getStaticPaths()
 		// isn't invisible and developer can track down the issue.
-		if (this.cache[route.component]) {
+		if (this.mode === 'production' && this.cache[route.component]) {
 			warn(
 				this.logging,
 				'routeCache',
@@ -106,15 +114,15 @@ export class RouteCache {
 	}
 }
 
-export function findPathItemByKey(staticPaths: GetStaticPathsResultKeyed, params: Params) {
-	const paramsKey = stringifyParams(params);
-	let matchedStaticPath = staticPaths.keyed.get(paramsKey);
+export function findPathItemByKey(
+	staticPaths: GetStaticPathsResultKeyed,
+	params: Params,
+	route: RouteData
+) {
+	const paramsKey = stringifyParams(params, route.component);
+	const matchedStaticPath = staticPaths.keyed.get(paramsKey);
 	if (matchedStaticPath) {
 		return matchedStaticPath;
 	}
-
 	debug('findPathItemByKey', `Unexpected cache miss looking for ${paramsKey}`);
-	matchedStaticPath = staticPaths.find(
-		({ params: _params }) => JSON.stringify(_params) === paramsKey
-	);
 }

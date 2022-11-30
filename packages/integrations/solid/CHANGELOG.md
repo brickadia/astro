@@ -1,5 +1,36 @@
 # @astrojs/solid-js
 
+## 1.2.3
+
+### Patch Changes
+
+- [#5345](https://github.com/withastro/astro/pull/5345) [`3ae2a961b`](https://github.com/withastro/astro/commit/3ae2a961b77da179d24c44734af54424e76a5049) Thanks [@bluwy](https://github.com/bluwy)! - Respect Vite user config for third-party packages config handling
+
+## 1.2.2
+
+### Patch Changes
+
+- [#5208](https://github.com/withastro/astro/pull/5208) [`c98c5aa0a`](https://github.com/withastro/astro/commit/c98c5aa0aecb4625aeedc2ffdad69f8b2cd2c153) Thanks [@bluwy](https://github.com/bluwy)! - Improve third-party solid packages config handling
+
+## 1.2.1
+
+### Patch Changes
+
+- [#5089](https://github.com/withastro/astro/pull/5089) [`0173c2b2d`](https://github.com/withastro/astro/commit/0173c2b2dfa49b3cb6afec7a411cdbad272b8fde) Thanks [@bluwy](https://github.com/bluwy)! - Suppress warnings for dependency crawling
+
+## 1.2.0
+
+### Minor Changes
+
+- [#5059](https://github.com/withastro/astro/pull/5059) [`f7fcdfe62`](https://github.com/withastro/astro/commit/f7fcdfe6210b3cf08cad92c49b64adf169b9e744) Thanks [@bluwy](https://github.com/bluwy)! - Auto ssr.noExternal solidjs dependencies
+
+## 1.1.1
+
+### Patch Changes
+
+- [#4888](https://github.com/withastro/astro/pull/4888) [`2dc582ac5`](https://github.com/withastro/astro/commit/2dc582ac5e2d6e1d434ccfe21616182e453feec3) Thanks [@AirBorne04](https://github.com/AirBorne04)! - adjusting the build settings for cloudflare (reverting back to platform browser over neutral)
+  adjusting the ssr settings for solidjs (to build for node)
+
 ## 1.1.0
 
 ### Minor Changes

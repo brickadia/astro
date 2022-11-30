@@ -1,5 +1,126 @@
 /// <reference path="./import-meta.d.ts" />
 
+type MD = import('./dist/@types/astro').MarkdownInstance<Record<string, any>>;
+interface ExportedMarkdownModuleEntities {
+	frontmatter: MD['frontmatter'];
+	file: MD['file'];
+	url: MD['url'];
+	getHeadings: MD['getHeadings'];
+	/** @deprecated Renamed to `getHeadings()` */
+	getHeaders: () => void;
+	Content: MD['Content'];
+	rawContent: MD['rawContent'];
+	compiledContent: MD['compiledContent'];
+	load: MD['default'];
+}
+
+declare module '*.md' {
+	const { load }: ExportedMarkdownModuleEntities;
+	export const {
+		frontmatter,
+		file,
+		url,
+		getHeadings,
+		getHeaders,
+		Content,
+		rawContent,
+		compiledContent,
+	}: ExportedMarkdownModuleEntities;
+	export default load;
+}
+
+declare module '*.markdown' {
+	const { load }: ExportedMarkdownModuleEntities;
+	export const {
+		frontmatter,
+		file,
+		url,
+		getHeadings,
+		getHeaders,
+		Content,
+		rawContent,
+		compiledContent,
+	}: ExportedMarkdownModuleEntities;
+	export default load;
+}
+
+declare module '*.mkdn' {
+	const { load }: ExportedMarkdownModuleEntities;
+	export const {
+		frontmatter,
+		file,
+		url,
+		getHeadings,
+		getHeaders,
+		Content,
+		rawContent,
+		compiledContent,
+	}: ExportedMarkdownModuleEntities;
+	export default load;
+}
+
+declare module '*.mkd' {
+	const { load }: ExportedMarkdownModuleEntities;
+	export const {
+		frontmatter,
+		file,
+		url,
+		getHeadings,
+		getHeaders,
+		Content,
+		rawContent,
+		compiledContent,
+	}: ExportedMarkdownModuleEntities;
+	export default load;
+}
+
+declare module '*.mdwn' {
+	const { load }: ExportedMarkdownModuleEntities;
+	export const {
+		frontmatter,
+		file,
+		url,
+		getHeadings,
+		getHeaders,
+		Content,
+		rawContent,
+		compiledContent,
+	}: ExportedMarkdownModuleEntities;
+	export default load;
+}
+
+declare module '*.mdown' {
+	const { load }: ExportedMarkdownModuleEntities;
+	export const {
+		frontmatter,
+		file,
+		url,
+		getHeadings,
+		getHeaders,
+		Content,
+		rawContent,
+		compiledContent,
+	}: ExportedMarkdownModuleEntities;
+	export default load;
+}
+
+declare module '*.mdx' {
+	type MDX = import('./dist/@types/astro').MDXInstance<Record<string, any>>;
+
+	export const frontmatter: MDX['frontmatter'];
+	export const file: MDX['file'];
+	export const url: MDX['url'];
+	export const getHeadings: MDX['getHeadings'];
+	export const Content: MDX['Content'];
+	export const rawContent: MDX['rawContent'];
+	export const compiledContent: MDX['compiledContent'];
+
+	const load: MDX['default'];
+	export default load;
+}
+
+// Everything below are Vite's types (apart from image types, which are in `client.d.ts`)
+
 // CSS modules
 type CSSModuleClasses = { readonly [key: string]: string };
 

@@ -1,5 +1,67 @@
 # @astrojs/mdx
 
+## 0.12.0
+
+### Minor Changes
+
+- [#5427](https://github.com/withastro/astro/pull/5427) [`2a1c085b1`](https://github.com/withastro/astro/commit/2a1c085b199f24e34424ec8c19041c03602c53c5) Thanks [@backflip](https://github.com/backflip)! - Uses remark-rehype options from astro.config.mjs
+
+### Patch Changes
+
+- [#5448](https://github.com/withastro/astro/pull/5448) [`ef2ffc7ae`](https://github.com/withastro/astro/commit/ef2ffc7ae9ff554860238ecd2fb3bf6d82b5801b) Thanks [@delucis](https://github.com/delucis)! - Fix broken link in README
+
+## 0.11.6
+
+### Patch Changes
+
+- [#5335](https://github.com/withastro/astro/pull/5335) [`dca762cf7`](https://github.com/withastro/astro/commit/dca762cf734a657d8f126fd6958892b6163a4f67) Thanks [@bluwy](https://github.com/bluwy)! - Preserve code element node `data.meta` in `properties.metastring` for rehype syntax highlighters, like `rehype-pretty-code``
+
+## 0.11.5
+
+### Patch Changes
+
+- [#5146](https://github.com/withastro/astro/pull/5146) [`308e565ad`](https://github.com/withastro/astro/commit/308e565ad39957e3353d72ca5d3bbce1a1b45008) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Support recmaPlugins config option
+
+## 0.11.4
+
+### Patch Changes
+
+- [#4953](https://github.com/withastro/astro/pull/4953) [`a59731995`](https://github.com/withastro/astro/commit/a59731995b93ae69c21dc3adc5c8b482b466d12e) Thanks [@bluwy](https://github.com/bluwy)! - Log markdown hints with console.info
+
+## 0.11.3
+
+### Patch Changes
+
+- [#4842](https://github.com/withastro/astro/pull/4842) [`812658ad2`](https://github.com/withastro/astro/commit/812658ad2ab3732a99e35c4fd903e302e723db46) Thanks [@bluwy](https://github.com/bluwy)! - Add missing dependencies, support strict dependency installation (e.g. pnpm)
+
+## 0.11.2
+
+### Patch Changes
+
+- [#4700](https://github.com/withastro/astro/pull/4700) [`e5f71142e`](https://github.com/withastro/astro/commit/e5f71142eb62bd72456e889dad5774347c3753f2) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Document MDXLayoutProps utility type
+
+- [#4858](https://github.com/withastro/astro/pull/4858) [`58a2dca22`](https://github.com/withastro/astro/commit/58a2dca2286cb14f6211cf51267c02447e78433a) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Correctly parse import.meta.env in MDX files
+
+## 0.11.1
+
+### Patch Changes
+
+- [#4588](https://github.com/withastro/astro/pull/4588) [`db38f61b2`](https://github.com/withastro/astro/commit/db38f61b2b2dc55f03b28797d19b163b1940f1c8) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix: Add GFM and Smartypants to MDX by default
+
+## 0.11.0
+
+### Minor Changes
+
+- [#4504](https://github.com/withastro/astro/pull/4504) [`8f8dff4d3`](https://github.com/withastro/astro/commit/8f8dff4d339a3a12ee155d81a97132032ef3b622) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Introduce new `extendPlugins` configuration option. This defaults to inheriting all remark and rehype plugins from your `markdown` config, with options to use either Astro's defaults or no inheritance at all.
+
+## 0.10.3
+
+### Patch Changes
+
+- [#4519](https://github.com/withastro/astro/pull/4519) [`a2e8e76c3`](https://github.com/withastro/astro/commit/a2e8e76c303e8d6f39c24c122905a10f06907997) Thanks [@JuanM04](https://github.com/JuanM04)! - Upgraded Shiki to v0.11.1
+
+- [#4530](https://github.com/withastro/astro/pull/4530) [`8504cd79b`](https://github.com/withastro/astro/commit/8504cd79b708e0d3bf1a2bb4ff9b86936bdd692b) Thanks [@kylebutts](https://github.com/kylebutts)! - Add custom components to README
+
 ## 0.10.2
 
 ### Patch Changes

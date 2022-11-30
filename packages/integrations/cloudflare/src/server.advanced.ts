@@ -1,22 +1,25 @@
-import './shim.js';
-
 import type { SSRManifest } from 'astro';
 import { App } from 'astro/app';
+import { getProcessEnvProxy } from './util.js';
+
+process.env = getProcessEnvProxy();
 
 type Env = {
 	ASSETS: { fetch: (req: Request) => Promise<Response> };
+	name: string;
 };
 
 export function createExports(manifest: SSRManifest) {
 	const app = new App(manifest, false);
 
-	const fetch = async (request: Request, env: Env) => {
-		const { origin, pathname } = new URL(request.url);
+	const fetch = async (request: Request, env: Env, context: any) => {
+		process.env = env as any;
 
-		// static assets
+		const { pathname } = new URL(request.url);
+
+		// static assets fallback, in case default _routes.json is not used
 		if (manifest.assets.has(pathname)) {
-			const assetRequest = new Request(`${origin}/static${pathname}`, request);
-			return env.ASSETS.fetch(assetRequest);
+			return env.ASSETS.fetch(request);
 		}
 
 		let routeData = app.match(request, { matchNotFound: true });
@@ -26,7 +29,16 @@ export function createExports(manifest: SSRManifest) {
 				Symbol.for('astro.clientAddress'),
 				request.headers.get('cf-connecting-ip')
 			);
-			return app.render(request, routeData);
+			Reflect.set(request, Symbol.for('runtime'), { env, name: 'cloudflare', ...context });
+			let response = await app.render(request, routeData);
+
+			if (app.setCookieHeaders) {
+				for (const setCookieHeader of app.setCookieHeaders(response)) {
+					response.headers.append('Set-Cookie', setCookieHeader);
+				}
+			}
+
+			return response;
 		}
 
 		return new Response(null, {

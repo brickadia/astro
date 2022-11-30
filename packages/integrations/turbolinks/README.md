@@ -26,14 +26,14 @@ To install `@astrojs/turbolinks`, run the following from your project directory 
 
 ```sh
 # Using NPM
-npm run astro add turbolinks
+npx astro add turbolinks
 # Using Yarn
 yarn astro add turbolinks
 # Using PNPM
 pnpm astro add turbolinks
 ```
 
-If you run into any hiccups, [feel free to log an issue on our GitHub](https://github.com/withastro/astro/issues) and try the manual installation steps below.
+If you run into any issues, [feel free to report them to us on GitHub](https://github.com/withastro/astro/issues) and try the manual installation steps below.
 
 ### Install dependencies manually
 
@@ -61,6 +61,16 @@ export default {
 Turbo links, frames, and more should be ready-to-use with zero config. For instance, try navigating between different pages via links. You should no longer see browser refreshes! You will also find each page request passing through `turbolinks` under the "Network" tab in [your browser's dev tools](https://developer.chrome.com/docs/devtools/).
 
 Head to [the Turbo handbook](https://turbo.hotwired.dev/handbook/introduction) for all options and features available. You can also check our [Astro Integration Documentation][astro-integration] for more on integrations.
+
+## Troubleshooting
+
+For help, check out the `#support` channel on [Discord](https://astro.build/chat). Our friendly Support Squad members are here to help!
+
+You can also check our [Astro Integration Documentation][astro-integration] for more on integrations.
+
+## Contributing
+
+This package is maintained by Astro's Core team. You're welcome to submit an issue or PR!
 
 [astro-integration]: https://docs.astro.build/en/guides/integrations-guide/
 [astro-ui-frameworks]: https://docs.astro.build/en/core-concepts/framework-components/#using-framework-components

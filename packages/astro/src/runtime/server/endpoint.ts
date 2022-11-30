@@ -18,13 +18,26 @@ function getHandlerFromModule(mod: EndpointHandler, method: string) {
 }
 
 /** Renders an endpoint request to completion, returning the body. */
-export async function renderEndpoint(mod: EndpointHandler, request: Request, params: Params, context: any) {
+export async function renderEndpoint(mod: EndpointHandler, apiContext: APIContext, ssr: boolean, context: any) {
+	const { request, params } = apiContext;
 	const chosenMethod = request.method?.toLowerCase();
 	const handler = getHandlerFromModule(mod, chosenMethod);
+	if (!ssr && ssr === false && chosenMethod && chosenMethod !== 'get') {
+		// eslint-disable-next-line no-console
+		console.warn(`
+${chosenMethod} requests are not available when building a static site. Update your config to output: 'server' to handle ${chosenMethod} requests.`);
+	}
 	if (!handler || typeof handler !== 'function') {
-		throw new Error(
-			`Endpoint handler not found! Expected an exported function for "${chosenMethod}"`
-		);
+		// No handler found, so this should be a 404. Using a custom header
+		// to signal to the renderer that this is an internal 404 that should
+		// be handled by a custom 404 route if possible.
+		let response = new Response(null, {
+			status: 404,
+			headers: {
+				'X-Astro-Response': 'Not-Found',
+			},
+		});
+		return response;
 	}
 
 	if (handler.length > 1) {

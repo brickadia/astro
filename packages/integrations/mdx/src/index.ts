@@ -1,30 +1,20 @@
-import { compile as mdxCompile, nodeTypes } from '@mdx-js/mdx';
+import { compile as mdxCompile } from '@mdx-js/mdx';
+import { PluggableList } from '@mdx-js/mdx/lib/core.js';
 import mdxPlugin, { Options as MdxRollupPluginOptions } from '@mdx-js/rollup';
-import type { AstroConfig, AstroIntegration } from 'astro';
+import type { AstroIntegration } from 'astro';
 import { parse as parseESM } from 'es-module-lexer';
-import rehypeRaw from 'rehype-raw';
-import remarkGfm from 'remark-gfm';
-import remarkSmartypants from 'remark-smartypants';
+import { blue, bold } from 'kleur/colors';
+import fs from 'node:fs/promises';
+import type { Options as RemarkRehypeOptions } from 'remark-rehype';
 import { VFile } from 'vfile';
 import type { Plugin as VitePlugin } from 'vite';
-import { rehypeApplyFrontmatterExport, remarkInitializeAstroData } from './astro-data-utils.js';
-import rehypeCollectHeadings from './rehype-collect-headings.js';
-import remarkPrism from './remark-prism.js';
-import remarkShiki from './remark-shiki.js';
-import { getFileInfo, parseFrontmatter } from './utils.js';
-
-type WithExtends<T> = T | { extends: T };
-
-type MdxOptions = {
-	remarkPlugins?: WithExtends<MdxRollupPluginOptions['remarkPlugins']>;
-	rehypePlugins?: WithExtends<MdxRollupPluginOptions['rehypePlugins']>;
-};
-
-const DEFAULT_REMARK_PLUGINS: MdxRollupPluginOptions['remarkPlugins'] = [
-	remarkGfm,
-	remarkSmartypants,
-];
-const DEFAULT_REHYPE_PLUGINS: MdxRollupPluginOptions['rehypePlugins'] = [];
+import {
+	getRehypePlugins,
+	getRemarkPlugins,
+	recmaInjectImportMetaEnvPlugin,
+	rehypeApplyFrontmatterExport,
+} from './plugins.js';
+import { getFileInfo, handleExtendsNotSupported, parseFrontmatter } from './utils.js';
 
 const RAW_CONTENT_ERROR =
 	'MDX does not support rawContent()! If you need to read the Markdown contents to calculate values (ex. reading time), we suggest injecting frontmatter via remark plugins. Learn more on our docs: https://docs.astro.build/en/guides/integrations-guide/mdx/#inject-frontmatter-via-remark-or-rehype-plugins';
@@ -32,44 +22,20 @@ const RAW_CONTENT_ERROR =
 const COMPILED_CONTENT_ERROR =
 	'MDX does not support compiledContent()! If you need to read the HTML contents to calculate values (ex. reading time), we suggest injecting frontmatter via rehype plugins. Learn more on our docs: https://docs.astro.build/en/guides/integrations-guide/mdx/#inject-frontmatter-via-remark-or-rehype-plugins';
 
-function handleExtends<T>(config: WithExtends<T[] | undefined>, defaults: T[] = []): T[] {
-	if (Array.isArray(config)) return config;
-
-	return [...defaults, ...(config?.extends ?? [])];
-}
-
-async function getRemarkPlugins(
-	mdxOptions: MdxOptions,
-	config: AstroConfig
-): Promise<MdxRollupPluginOptions['remarkPlugins']> {
-	let remarkPlugins = [
-		// Initialize vfile.data.astroExports before all plugins are run
-		remarkInitializeAstroData,
-		...handleExtends(mdxOptions.remarkPlugins, DEFAULT_REMARK_PLUGINS),
-	];
-	if (config.markdown.syntaxHighlight === 'shiki') {
-		remarkPlugins.push([await remarkShiki(config.markdown.shikiConfig)]);
-	}
-	if (config.markdown.syntaxHighlight === 'prism') {
-		remarkPlugins.push(remarkPrism);
-	}
-	return remarkPlugins;
-}
-
-function getRehypePlugins(
-	mdxOptions: MdxOptions,
-	config: AstroConfig
-): MdxRollupPluginOptions['rehypePlugins'] {
-	let rehypePlugins = [
-		[rehypeRaw, { passThrough: nodeTypes }] as any,
-		...handleExtends(mdxOptions.rehypePlugins, DEFAULT_REHYPE_PLUGINS),
-	];
-
-	// getHeadings() is guaranteed by TS, so we can't allow user to override
-	rehypePlugins.unshift(rehypeCollectHeadings);
-
-	return rehypePlugins;
-}
+export type MdxOptions = {
+	remarkPlugins?: PluggableList;
+	rehypePlugins?: PluggableList;
+	recmaPlugins?: PluggableList;
+	/**
+	 * Choose which remark and rehype plugins to inherit, if any.
+	 *
+	 * - "markdown" (default) - inherit your project’s markdown plugin config ([see Markdown docs](https://docs.astro.build/en/guides/markdown-content/#configuring-markdown))
+	 * - "astroDefaults" - inherit Astro’s default plugins only ([see defaults](https://docs.astro.build/en/reference/configuration-reference/#markdownextenddefaultplugins))
+	 * - false - do not inherit any plugins
+	 */
+	extendPlugins?: 'markdown' | 'astroDefaults' | false;
+	remarkRehype?: RemarkRehypeOptions;
+};
 
 export default function mdx(mdxOptions: MdxOptions = {}): AstroIntegration {
 	return {
@@ -77,15 +43,50 @@ export default function mdx(mdxOptions: MdxOptions = {}): AstroIntegration {
 		hooks: {
 			'astro:config:setup': async ({ updateConfig, config, addPageExtension, command }: any) => {
 				addPageExtension('.mdx');
+				mdxOptions.extendPlugins ??= 'markdown';
+
+				handleExtendsNotSupported(mdxOptions.remarkPlugins);
+				handleExtendsNotSupported(mdxOptions.rehypePlugins);
+
+				// TODO: remove for 1.0. Shipping to ease migration to new minor
+				if (
+					mdxOptions.extendPlugins === 'markdown' &&
+					(config.markdown.rehypePlugins?.length || config.markdown.remarkPlugins?.length)
+				) {
+					console.info(
+						blue(`[MDX] Now inheriting remark and rehype plugins from "markdown" config.`)
+					);
+					console.info(
+						`If you applied a plugin to both your Markdown and MDX configs, we suggest ${bold(
+							'removing the duplicate MDX entry.'
+						)}`
+					);
+					console.info(`See "extendPlugins" option to configure this behavior.`);
+				}
+
+				let remarkRehypeOptions = mdxOptions.remarkRehype;
+
+				if (mdxOptions.extendPlugins === 'markdown') {
+					remarkRehypeOptions = {
+						...config.markdown.remarkRehype,
+						...remarkRehypeOptions,
+					};
+				}
 
 				const mdxPluginOpts: MdxRollupPluginOptions = {
 					remarkPlugins: await getRemarkPlugins(mdxOptions, config),
 					rehypePlugins: getRehypePlugins(mdxOptions, config),
+					recmaPlugins: mdxOptions.recmaPlugins,
 					jsx: true,
 					jsxImportSource: 'astro',
-					// Note: disable `.md` support
+					// Note: disable `.md` (and other alternative extensions for markdown files like `.markdown`) support
 					format: 'mdx',
 					mdExtensions: [],
+					remarkRehypeOptions,
+				};
+
+				let importMetaEnv: Record<string, any> = {
+					SITE: config.site,
 				};
 
 				updateConfig({
@@ -94,10 +95,17 @@ export default function mdx(mdxOptions: MdxOptions = {}): AstroIntegration {
 							{
 								enforce: 'pre',
 								...mdxPlugin(mdxPluginOpts),
+								configResolved(resolved) {
+									importMetaEnv = { ...importMetaEnv, ...resolved.env };
+								},
 								// Override transform to alter code before MDX compilation
 								// ex. inject layouts
-								async transform(code, id) {
+								async transform(_, id) {
 									if (!id.endsWith('mdx')) return;
+
+									// Read code from file manually to prevent Vite from parsing `import.meta.env` expressions
+									const { fileId } = getFileInfo(id, config);
+									const code = await fs.readFile(fileId, 'utf-8');
 
 									const { data: frontmatter, content: pageContent } = parseFrontmatter(code, id);
 									const compiled = await mdxCompile(new VFile({ value: pageContent, path: id }), {
@@ -106,10 +114,14 @@ export default function mdx(mdxOptions: MdxOptions = {}): AstroIntegration {
 											...(mdxPluginOpts.rehypePlugins ?? []),
 											() => rehypeApplyFrontmatterExport(frontmatter),
 										],
+										recmaPlugins: [
+											...(mdxPluginOpts.recmaPlugins ?? []),
+											() => recmaInjectImportMetaEnvPlugin({ importMetaEnv }),
+										],
 									});
 
 									return {
-										code: String(compiled.value),
+										code: escapeViteEnvReferences(String(compiled.value)),
 										map: compiled.map,
 									};
 								},
@@ -153,7 +165,7 @@ export default function mdx(mdxOptions: MdxOptions = {}): AstroIntegration {
 											import.meta.hot.decline();
 										}`;
 									}
-									return code;
+									return escapeViteEnvReferences(code);
 								},
 							},
 						] as VitePlugin[],
@@ -162,4 +174,11 @@ export default function mdx(mdxOptions: MdxOptions = {}): AstroIntegration {
 			},
 		},
 	};
+}
+
+// Converts the first dot in `import.meta.env` to its Unicode escape sequence,
+// which prevents Vite from replacing strings like `import.meta.env.SITE`
+// in our JS representation of loaded Markdown files
+function escapeViteEnvReferences(code: string) {
+	return code.replace(/import\.meta\.env/g, 'import\\u002Emeta.env');
 }

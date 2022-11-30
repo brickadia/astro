@@ -1,5 +1,30 @@
 # @astrojs/rss
 
+## 1.0.3
+
+### Patch Changes
+
+- [#5164](https://github.com/withastro/astro/pull/5164) [`4a8a346ca`](https://github.com/withastro/astro/commit/4a8a346ca9a6d6ed8def2fa32329c1db922893d2) Thanks [@MoustaphaDev](https://github.com/MoustaphaDev)! - Add support for markdown files with the following extensions:
+  - `.markdown`
+  - `.mdown`
+  - `.mkdn`
+  - `.mkd`
+  - `.mdwn`
+
+## 1.0.2
+
+### Patch Changes
+
+- [#4842](https://github.com/withastro/astro/pull/4842) [`812658ad2`](https://github.com/withastro/astro/commit/812658ad2ab3732a99e35c4fd903e302e723db46) Thanks [@bluwy](https://github.com/bluwy)! - Add missing dependencies, support strict dependency installation (e.g. pnpm)
+
+- [#4842](https://github.com/withastro/astro/pull/4842) [`812658ad2`](https://github.com/withastro/astro/commit/812658ad2ab3732a99e35c4fd903e302e723db46) Thanks [@bluwy](https://github.com/bluwy)! - Remove path-browserify dependency
+
+## 1.0.1
+
+### Patch Changes
+
+- [#4701](https://github.com/withastro/astro/pull/4701) [`6e1d62fe2`](https://github.com/withastro/astro/commit/6e1d62fe222e45b763b2b60b377b07e431950d54) Thanks [@bholmesdev](https://github.com/bholmesdev)! - Fix globs for homepage route
+
 ## 1.0.0
 
 ### Major Changes

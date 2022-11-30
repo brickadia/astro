@@ -1,5 +1,56 @@
 # create-astro
 
+## 1.2.3
+
+### Patch Changes
+
+- [#5404](https://github.com/withastro/astro/pull/5404) [`505abfd64`](https://github.com/withastro/astro/commit/505abfd6430b1f71e52d10b02bf9beb5847df8b6) Thanks [@liruifengv](https://github.com/liruifengv)! - fix error when don't have template input
+
+## 1.2.2
+
+### Patch Changes
+
+- [#5319](https://github.com/withastro/astro/pull/5319) [`b211eadef`](https://github.com/withastro/astro/commit/b211eadeffd6260700254c1492c8e6528d279ad1) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Fix bug with `setRawMode`. Respect `--skip-houston` in all cases.
+
+## 1.2.1
+
+### Patch Changes
+
+- [#5240](https://github.com/withastro/astro/pull/5240) [`d9be7e36b`](https://github.com/withastro/astro/commit/d9be7e36b872eb48516dc9d0d5c9d333aac4950b) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Improve error messages when `create-astro` fails
+
+- [#5226](https://github.com/withastro/astro/pull/5226) [`641b6d7d5`](https://github.com/withastro/astro/commit/641b6d7d583886fde9529f296846d7e0a50e8624) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Allow Windows users to pass `--fancy` to enable full unicode support
+
+## 1.2.0
+
+### Minor Changes
+
+- [#5088](https://github.com/withastro/astro/pull/5088) [`040837628`](https://github.com/withastro/astro/commit/04083762810a1a9e078a7e68edab945c8063b1ab) Thanks [@natemoo-re](https://github.com/natemoo-re)! - Introducing your new automated assistant: Houston! 🎉
+
+  ```
+  ╭─────╮  Houston:
+  │ ◠ ◡ ◠  Initiating launch sequence... right... now!
+  ╰─────╯
+  ```
+
+  Updates template and TypeScript prompts for clarity and friendliness.
+
+  Migrates template copying from [`degit`](https://github.com/Rich-Harris/degit) (unmaintained) to [`giget`](https://github.com/unjs/giget) for stability.
+
+## 1.1.0
+
+### Minor Changes
+
+- [#4810](https://github.com/withastro/astro/pull/4810) [`7481ffda0`](https://github.com/withastro/astro/commit/7481ffda028d9028d8e28bc7c6e9960ab80acf0f) Thanks [@mrienstra](https://github.com/mrienstra)! - Alway write chosen config to `tsconfig.json`.
+
+  - Before: Only when `strict` & `strictest` was selected
+  - After: Also when `base` is selected (via "Relaxed" or "I prefer not to use TypeScript")
+
+## 1.0.2
+
+### Patch Changes
+
+- [#4805](https://github.com/withastro/astro/pull/4805) [`c84d85ba4`](https://github.com/withastro/astro/commit/c84d85ba4d85f250d87bbc98c74665992f6c2768) Thanks [@HiDeoo](https://github.com/HiDeoo)! - Add support for running in cloned empty git repository
+
 ## 1.0.1
 
 ### Patch Changes

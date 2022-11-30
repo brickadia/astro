@@ -1,5 +1,17 @@
 # @astrojs/partytown
 
+## 1.0.2
+
+### Patch Changes
+
+- [#5425](https://github.com/withastro/astro/pull/5425) [`4266869f4`](https://github.com/withastro/astro/commit/4266869f4fef37fadb2e0c4c0b703decde11037a) Thanks [@brenelz](https://github.com/brenelz)! - fix partytown when base path specified
+
+## 1.0.1
+
+### Patch Changes
+
+- [#4989](https://github.com/withastro/astro/pull/4989) [`50a397c4b`](https://github.com/withastro/astro/commit/50a397c4ba61dffaeb1aaf2a4e262ea79cd1580a) Thanks [@that-joao](https://github.com/that-joao)! - Update @builder.io/partytown dependency
+
 ## 1.0.0
 
 ### Major Changes

@@ -1,6 +1,7 @@
 import type { TransformResult } from 'rollup';
+import type { TsConfigJson } from 'tsconfig-resolver';
 import type { Plugin, ResolvedConfig } from 'vite';
-import type { AstroConfig, AstroRenderer } from '../@types/astro';
+import type { AstroRenderer, AstroSettings } from '../@types/astro';
 import type { LogOptions } from '../core/logger/core.js';
 import type { PluginMetadata } from '../vite-plugin-astro/types';
 
@@ -10,8 +11,13 @@ import esbuild from 'esbuild';
 import * as colors from 'kleur/colors';
 import path from 'path';
 import { error } from '../core/logger/core.js';
+import { removeQueryString } from '../core/path.js';
 import { parseNpmName } from '../core/util.js';
 import tagExportsPlugin from './tag.js';
+
+type FixedCompilerOptions = TsConfigJson.CompilerOptions & {
+	jsxImportSource?: string;
+};
 
 const JSX_EXTENSIONS = new Set(['.jsx', '.tsx', '.mdx']);
 const IMPORT_STATEMENTS: Record<string, string> = {
@@ -93,6 +99,7 @@ interface TransformJSXOptions {
 	mode: string;
 	renderer: AstroRenderer;
 	ssr: boolean;
+	root: URL;
 }
 
 async function transformJSX({
@@ -101,12 +108,13 @@ async function transformJSX({
 	id,
 	ssr,
 	renderer,
+	root,
 }: TransformJSXOptions): Promise<TransformResult> {
 	const { jsxTransformOptions } = renderer;
 	const options = await jsxTransformOptions!({ mode, ssr });
 	const plugins = [...(options.plugins || [])];
 	if (ssr) {
-		plugins.push(tagExportsPlugin({ rendererName: renderer.name }));
+		plugins.push(await tagExportsPlugin({ rendererName: renderer.name, root }));
 	}
 	const result = await babel.transformAsync(code, {
 		presets: options.presets,
@@ -147,12 +155,12 @@ async function transformJSX({
 }
 
 interface AstroPluginJSXOptions {
-	config: AstroConfig;
+	settings: AstroSettings;
 	logging: LogOptions;
 }
 
 /** Use Astro config to allow for alternate or multiple JSX renderers (by default Vite will assume React) */
-export default function jsx({ config, logging }: AstroPluginJSXOptions): Plugin {
+export default function jsx({ settings, logging }: AstroPluginJSXOptions): Plugin {
 	let viteConfig: ResolvedConfig;
 	const jsxRenderers = new Map<string, AstroRenderer>();
 	const jsxRenderersIntegrationOnly = new Map<string, AstroRenderer>();
@@ -160,14 +168,14 @@ export default function jsx({ config, logging }: AstroPluginJSXOptions): Plugin 
 	let astroJSXRenderer: AstroRenderer;
 	// The first JSX renderer provided is considered the default renderer.
 	// This is a useful reference for when the user only gives a single render.
-	let defaultJSXRendererEntry: [string, AstroRenderer];
+	let defaultJSXRendererEntry: [string, AstroRenderer] | undefined;
 
 	return {
 		name: 'astro:jsx',
 		enforce: 'pre', // run transforms before other plugins
 		async configResolved(resolvedConfig) {
 			viteConfig = resolvedConfig;
-			const possibleRenderers = await collectJSXRenderers(config._ctx.renderers);
+			const possibleRenderers = collectJSXRenderers(settings.renderers);
 			for (const [importSource, renderer] of possibleRenderers) {
 				jsxRenderers.set(importSource, renderer);
 				if (importSource === 'astro') {
@@ -180,13 +188,14 @@ export default function jsx({ config, logging }: AstroPluginJSXOptions): Plugin 
 		},
 		async transform(code, id, opts) {
 			const ssr = Boolean(opts?.ssr);
+			id = removeQueryString(id);
 			if (!JSX_EXTENSIONS.has(path.extname(id))) {
 				return null;
 			}
 
 			const { mode } = viteConfig;
 			// Shortcut: only use Astro renderer for MD and MDX files
-			if (id.includes('.mdx') || id.includes('.md')) {
+			if (id.endsWith('.mdx')) {
 				const { code: jsxCode } = await esbuild.transform(code, {
 					loader: getEsbuildLoader(path.extname(id)) as esbuild.Loader,
 					jsx: 'preserve',
@@ -199,6 +208,7 @@ export default function jsx({ config, logging }: AstroPluginJSXOptions): Plugin 
 					renderer: astroJSXRenderer,
 					mode,
 					ssr,
+					root: settings.config.root,
 				});
 			}
 			if (defaultJSXRendererEntry && jsxRenderersIntegrationOnly.size === 1) {
@@ -215,6 +225,7 @@ export default function jsx({ config, logging }: AstroPluginJSXOptions): Plugin 
 					renderer: defaultJSXRendererEntry[1],
 					mode,
 					ssr,
+					root: settings.config.root,
 				});
 			}
 
@@ -223,9 +234,15 @@ export default function jsx({ config, logging }: AstroPluginJSXOptions): Plugin 
 				importSource = await detectImportSourceFromImports(code, id, jsxRenderers);
 			}
 
-			// if we still can’t tell the import source, now is the time to throw an error.
+			// Check the tsconfig
 			if (!importSource) {
-				const [defaultRendererName] = defaultJSXRendererEntry[0];
+				const compilerOptions = settings.tsConfig?.compilerOptions;
+				importSource = (compilerOptions as FixedCompilerOptions | undefined)?.jsxImportSource;
+			}
+
+			// if we still can’t tell the import source, now is the time to throw an error.
+			if (!importSource && defaultJSXRendererEntry) {
+				const [defaultRendererName] = defaultJSXRendererEntry;
 				error(
 					logging,
 					'renderer',
@@ -234,6 +251,16 @@ Unable to resolve a renderer that handles this file! With more than one renderer
 Add ${colors.cyan(
 						IMPORT_STATEMENTS[defaultRendererName] || `import '${defaultRendererName}';`
 					)} or ${colors.cyan(`/* jsxImportSource: ${defaultRendererName} */`)} to this file.
+`
+				);
+				return null;
+			} else if (!importSource) {
+				error(
+					logging,
+					'renderer',
+					`${colors.yellow(id)}
+Unable to find a renderer for JSX. Do you have one configured in your Astro config? See this page to learn how:
+https://docs.astro.build/en/core-concepts/framework-components/#installing-integrations
 `
 				);
 				return null;
@@ -265,6 +292,7 @@ Add ${colors.cyan(
 				renderer: selectedJsxRenderer,
 				mode,
 				ssr,
+				root: settings.config.root,
 			});
 		},
 	};

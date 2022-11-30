@@ -1,5 +1,19 @@
 # astro-scripts
 
+## 0.0.9
+
+### Patch Changes
+
+- Updated dependencies [[`b6a478f37`](https://github.com/withastro/astro/commit/b6a478f37648491321077750bfca7bddf3cafadd)]:
+  - @astrojs/webapi@1.1.1
+
+## 0.0.8
+
+### Patch Changes
+
+- Updated dependencies [[`5e4c5252b`](https://github.com/withastro/astro/commit/5e4c5252bd80cbaf6a7ee4d4503ece007664410f)]:
+  - @astrojs/webapi@1.1.0
+
 ## 0.0.7
 
 ### Patch Changes

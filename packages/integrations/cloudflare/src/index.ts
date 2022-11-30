@@ -1,11 +1,19 @@
-import type { AstroAdapter, AstroConfig, AstroIntegration, BuildConfig } from 'astro';
+import type { AstroAdapter, AstroConfig, AstroIntegration } from 'astro';
 import esbuild from 'esbuild';
 import * as fs from 'fs';
+import * as os from 'os';
+import glob from 'tiny-glob';
 import { fileURLToPath } from 'url';
 
 type Options = {
 	mode: 'directory' | 'advanced';
 };
+
+interface BuildConfig {
+	server: URL;
+	client: URL;
+	serverEntry: string;
+}
 
 export function getAdapter(isModeDirectory: boolean): AstroAdapter {
 	return isModeDirectory
@@ -26,17 +34,31 @@ const SHIM = `globalThis.process = {
 	env: {},
 };`;
 
+const SERVER_BUILD_FOLDER = '/$server_build/';
+
 export default function createIntegration(args?: Options): AstroIntegration {
 	let _config: AstroConfig;
 	let _buildConfig: BuildConfig;
+	let needsBuildConfig = false;
 	const isModeDirectory = args?.mode === 'directory';
 
 	return {
 		name: '@astrojs/cloudflare',
 		hooks: {
+			'astro:config:setup': ({ config, updateConfig }) => {
+				needsBuildConfig = !config.build.client;
+				updateConfig({
+					build: {
+						client: new URL(`.${config.base}`, config.outDir),
+						server: new URL(`.${SERVER_BUILD_FOLDER}`, config.outDir),
+						serverEntry: '_worker.js',
+					},
+				});
+			},
 			'astro:config:done': ({ setAdapter, config }) => {
 				setAdapter(getAdapter(isModeDirectory));
 				_config = config;
+				_buildConfig = config.build;
 
 				if (config.output === 'static') {
 					throw new Error(`
@@ -44,12 +66,11 @@ export default function createIntegration(args?: Options): AstroIntegration {
 
 `);
 				}
-			},
-			'astro:build:start': ({ buildConfig }) => {
-				_buildConfig = buildConfig;
-				buildConfig.client = new URL('./static/', _config.outDir);
-				buildConfig.serverEntry = '_worker.js';
-				buildConfig.server = new URL('./', _config.outDir);
+
+				if (config.base === SERVER_BUILD_FOLDER) {
+					throw new Error(`
+  [@astrojs/cloudflare] \`base: "${SERVER_BUILD_FOLDER}"\` is not allowed. Please change your \`base\` config to something else.`);
+				}
 			},
 			'astro:build:setup': ({ vite, target }) => {
 				if (target === 'server') {
@@ -65,21 +86,27 @@ export default function createIntegration(args?: Options): AstroIntegration {
 							(vite.resolve.alias as Record<string, string>)[alias.find] = alias.replacement;
 						}
 					}
-
-					vite.ssr = {
-						target: 'webworker',
-						noExternal: true,
-					};
+					vite.ssr = vite.ssr || {};
+					vite.ssr.target = vite.ssr.target || 'webworker';
+				}
+			},
+			'astro:build:start': ({ buildConfig }) => {
+				// Backwards compat
+				if (needsBuildConfig) {
+					buildConfig.client = new URL(`.${_config.base}`, _config.outDir);
+					buildConfig.server = new URL(`.${SERVER_BUILD_FOLDER}`, _config.outDir);
+					buildConfig.serverEntry = '_worker.js';
 				}
 			},
 			'astro:build:done': async () => {
-				const entryUrl = new URL(_buildConfig.serverEntry, _buildConfig.server);
-				const pkg = fileURLToPath(entryUrl);
+				const entryPath = fileURLToPath(new URL(_buildConfig.serverEntry, _buildConfig.server)),
+					entryUrl = new URL(_buildConfig.serverEntry, _config.outDir),
+					buildPath = fileURLToPath(entryUrl);
 				await esbuild.build({
 					target: 'es2020',
 					platform: 'browser',
-					entryPoints: [pkg],
-					outfile: pkg,
+					entryPoints: [entryPath],
+					outfile: buildPath,
 					allowOverwrite: true,
 					format: 'esm',
 					bundle: true,
@@ -90,8 +117,90 @@ export default function createIntegration(args?: Options): AstroIntegration {
 				});
 
 				// throw the server folder in the bin
-				const chunksUrl = new URL('./chunks', _buildConfig.server);
-				await fs.promises.rm(chunksUrl, { recursive: true, force: true });
+				const serverUrl = new URL(_buildConfig.server);
+				await fs.promises.rm(serverUrl, { recursive: true, force: true });
+
+				// move cloudflare specific files to the root
+				const cloudflareSpecialFiles = ['_headers', '_redirects', '_routes.json'];
+				if (_config.base !== '/') {
+					for (const file of cloudflareSpecialFiles) {
+						try {
+							await fs.promises.rename(
+								new URL(file, _buildConfig.client),
+								new URL(file, _config.outDir)
+							);
+						} catch (e) {
+							// ignore
+						}
+					}
+				}
+
+				const routesExists = await fs.promises
+					.stat(new URL('./_routes.json', _config.outDir))
+					.then((stat) => stat.isFile())
+					.catch(() => false);
+
+				// this creates a _routes.json, in case there is none present to enable
+				// cloudflare to handle static files and support _redirects configuration
+				// (without calling the function)
+				if (!routesExists) {
+					const staticPathList: Array<string> = (
+						await glob(`${fileURLToPath(_buildConfig.client)}/**/*`, {
+							cwd: fileURLToPath(_config.outDir),
+							filesOnly: true,
+						})
+					)
+						.filter((file: string) => cloudflareSpecialFiles.indexOf(file) < 0)
+						.map((file: string) => `/${file}`);
+
+					const redirectsExists = await fs.promises
+						.stat(new URL('./_redirects', _config.outDir))
+						.then((stat) => stat.isFile())
+						.catch(() => false);
+
+					// convert all redirect source paths into a list of routes
+					// and add them to the static path
+					if (redirectsExists) {
+						const redirects = (
+							await fs.promises.readFile(new URL('./_redirects', _config.outDir), 'utf-8')
+						)
+							.split(os.EOL)
+							.map((line) => {
+								const parts = line.split(' ');
+								if (parts.length < 2) {
+									return null;
+								} else {
+									// convert /products/:id to /products/*
+									return (
+										parts[0]
+											.replace(/\/:.*?(?=\/|$)/g, '/*')
+											// remove query params as they are not supported by cloudflare
+											.replace(/\?.*$/, '')
+									);
+								}
+							})
+							.filter(
+								(line, index, arr) => line !== null && arr.indexOf(line) === index
+							) as string[];
+
+						if (redirects.length > 0) {
+							staticPathList.push(...redirects);
+						}
+					}
+
+					await fs.promises.writeFile(
+						new URL('./_routes.json', _config.outDir),
+						JSON.stringify(
+							{
+								version: 1,
+								include: ['/*'],
+								exclude: staticPathList,
+							},
+							null,
+							2
+						)
+					);
+				}
 
 				if (isModeDirectory) {
 					const functionsUrl = new URL(`file://${process.cwd()}/functions/`);

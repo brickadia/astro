@@ -4,21 +4,18 @@ import esbuild from 'esbuild';
 import fs from 'fs';
 import matter from 'gray-matter';
 import { fileURLToPath } from 'url';
-import type { Plugin, ViteDevServer } from 'vite';
-import type { AstroConfig } from '../@types/astro';
+import type { Plugin, ResolvedConfig } from 'vite';
+import type { AstroSettings } from '../@types/astro';
 import { pagesVirtualModuleId } from '../core/app/index.js';
-import { collectErrorMetadata } from '../core/errors.js';
+import { cachedCompilation, CompileProps } from '../core/compile/index.js';
+import { AstroErrorData, MarkdownError } from '../core/errors/index.js';
 import type { LogOptions } from '../core/logger/core.js';
-import { cachedCompilation, CompileProps } from '../vite-plugin-astro/compile.js';
-import {
-	createTransformStyleWithViteFn,
-	TransformStyleWithVite,
-} from '../vite-plugin-astro/styles.js';
+import { isMarkdownFile } from '../core/util.js';
 import type { PluginMetadata as AstroPluginMetadata } from '../vite-plugin-astro/types';
 import { getFileInfo } from '../vite-plugin-utils/index.js';
 
 interface AstroPluginOptions {
-	config: AstroConfig;
+	settings: AstroSettings;
 	logging: LogOptions;
 }
 
@@ -28,16 +25,36 @@ const MARKDOWN_CONTENT_FLAG = '?content';
 function safeMatter(source: string, id: string) {
 	try {
 		return matter(source);
-	} catch (e) {
-		(e as any).id = id;
-		throw collectErrorMetadata(e);
+	} catch (err: any) {
+		const markdownError = new MarkdownError({
+			code: AstroErrorData.UnknownMarkdownError.code,
+			message: err.message,
+			stack: err.stack,
+			location: {
+				file: id,
+			},
+		});
+
+		if (err.name === 'YAMLException') {
+			markdownError.setErrorCode(AstroErrorData.MarkdownFrontmatterParseError.code);
+			markdownError.setLocation({
+				file: id,
+				line: err.mark.line,
+				column: err.mark.column,
+			});
+
+			markdownError.setMessage(err.reason);
+		}
+
+		throw markdownError;
 	}
 }
 
 // TODO: Clean up some of the shared logic between this Markdown plugin and the Astro plugin.
 // Both end up connecting a `load()` hook to the Astro compiler, and share some copy-paste
 // logic in how that is done.
-export default function markdown({ config, logging }: AstroPluginOptions): Plugin {
+export default function markdown({ settings }: AstroPluginOptions): Plugin {
+	const { config } = settings;
 	function normalizeFilename(filename: string) {
 		if (filename.startsWith('/@fs')) {
 			filename = filename.slice('/@fs'.length);
@@ -64,20 +81,16 @@ export default function markdown({ config, logging }: AstroPluginOptions): Plugi
 		return false;
 	}
 
-	let transformStyleWithVite: TransformStyleWithVite;
-	let viteDevServer: ViteDevServer | undefined;
+	let resolvedConfig: ResolvedConfig;
 
 	return {
 		name: 'astro:markdown',
 		enforce: 'pre',
-		configResolved(_resolvedConfig) {
-			transformStyleWithVite = createTransformStyleWithViteFn(_resolvedConfig);
-		},
 		async resolveId(id, importer, options) {
-			// Resolve any .md files with the `?content` cache buster. This should only come from
+			// Resolve any .md (or alternative extensions of markdown files like .markdown) files with the `?content` cache buster. This should only come from
 			// an already-resolved JS module wrapper. Needed to prevent infinite loops in Vite.
 			// Unclear if this is expected or if cache busting is just working around a Vite bug.
-			if (id.endsWith(`.md${MARKDOWN_CONTENT_FLAG}`)) {
+			if (isMarkdownFile(id, { suffix: MARKDOWN_CONTENT_FLAG })) {
 				const resolvedId = await this.resolve(id, importer, { skipSelf: true, ...options });
 				return resolvedId?.id.replace(MARKDOWN_CONTENT_FLAG, '');
 			}
@@ -85,7 +98,7 @@ export default function markdown({ config, logging }: AstroPluginOptions): Plugi
 			// that defers the markdown -> HTML rendering until it is needed. This is especially useful
 			// when fetching and then filtering many markdown files, like with import.meta.glob() or Astro.glob().
 			// Otherwise, resolve directly to the actual component.
-			if (id.endsWith('.md') && !isRootImport(importer)) {
+			if (isMarkdownFile(id) && !isRootImport(importer)) {
 				const resolvedId = await this.resolve(id, importer, { skipSelf: true, ...options });
 				if (resolvedId) {
 					return resolvedId.id + MARKDOWN_IMPORT_FLAG;
@@ -98,7 +111,7 @@ export default function markdown({ config, logging }: AstroPluginOptions): Plugi
 			// A markdown file has been imported via ESM!
 			// Return the file's JS representation, including all Markdown
 			// frontmatter and a deferred `import() of the compiled markdown content.
-			if (id.endsWith(`.md${MARKDOWN_IMPORT_FLAG}`)) {
+			if (isMarkdownFile(id, { suffix: MARKDOWN_IMPORT_FLAG })) {
 				const { fileId, fileUrl } = getFileInfo(id, config);
 
 				const source = await fs.promises.readFile(fileId, 'utf8');
@@ -114,9 +127,6 @@ export default function markdown({ config, logging }: AstroPluginOptions): Plugi
 						}
 						export async function compiledContent() {
 							return load().then((m) => m.compiledContent());
-						}
-						export function $$loadMetadata() {
-							return load().then((m) => m.$$metadata);
 						}
 
 						// Deferred
@@ -141,7 +151,7 @@ export default function markdown({ config, logging }: AstroPluginOptions): Plugi
 			// A markdown file is being rendered! This markdown file was either imported
 			// directly as a page in Vite, or it was a deferred render from a JS module.
 			// This returns the compiled markdown -> astro component that renders to HTML.
-			if (id.endsWith('.md')) {
+			if (isMarkdownFile(id)) {
 				const filename = normalizeFilename(id);
 				const source = await fs.promises.readFile(filename, 'utf8');
 				const renderOpts = config.markdown;
@@ -204,14 +214,10 @@ ${setup}`.trim();
 
 				// Transform from `.astro` to valid `.ts`
 				const compileProps: CompileProps = {
-					config,
+					astroConfig: config,
+					viteConfig: resolvedConfig,
 					filename,
-					moduleId: id,
 					source: astroResult,
-					ssr: Boolean(opts?.ssr),
-					transformStyleWithVite,
-					viteDevServer,
-					pluginContext: this,
 				};
 
 				let transformResult = await cachedCompilation(compileProps);

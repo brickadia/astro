@@ -1,5 +1,226 @@
 # @astrojs/node
 
+## 3.1.0
+
+### Minor Changes
+
+- [#5418](https://github.com/withastro/astro/pull/5418) [`aa16b6ceb`](https://github.com/withastro/astro/commit/aa16b6cebc08e0a10a17024d31ee7d2319258a34) Thanks [@jbanety](https://github.com/jbanety)! - Sometimes Astro sends a ReadableStream as a response and it raise an error **TypeError: body is not async iterable.**
+
+  I added a function to get a response iterator from different response types (sourced from apollo-client).
+
+  With this, node adapter can handle all the Astro response types.
+
+- [#5421](https://github.com/withastro/astro/pull/5421) [`12236dbc0`](https://github.com/withastro/astro/commit/12236dbc06e1e43618b61d180020a67cb31499f8) Thanks [@Scttpr](https://github.com/Scttpr)! - Allow HOST env variable to be provided at runtime
+
+### Patch Changes
+
+- Updated dependencies [[`1ab505855`](https://github.com/withastro/astro/commit/1ab505855f9942659e3d23cb1ac668f04b98889d), [`ff35b4759`](https://github.com/withastro/astro/commit/ff35b4759bd0fecfee6c99bf510c2e32d2574992), [`b22ba1c03`](https://github.com/withastro/astro/commit/b22ba1c03a3e384dad569feb38fa34ecf7ec3b93), [`a9f7ff966`](https://github.com/withastro/astro/commit/a9f7ff96676a40b78e22379edc8eb9ce60a29fb8)]:
+  - astro@1.6.10
+
+## 3.0.0
+
+### Major Changes
+
+- [#5290](https://github.com/withastro/astro/pull/5290) [`b2b291d29`](https://github.com/withastro/astro/commit/b2b291d29143703cece0d12c8e74b2e1151d2061) Thanks [@matthewp](https://github.com/matthewp)! - Handle base configuration in adapters
+
+  This allows adapters to correctly handle `base` configuration. Internally Astro now matches routes when the URL includes the `base`.
+
+  Adapters now also have access to the `removeBase` method which will remove the `base` from a pathname. This is useful to look up files for static assets.
+
+### Patch Changes
+
+- Updated dependencies [[`b2b291d29`](https://github.com/withastro/astro/commit/b2b291d29143703cece0d12c8e74b2e1151d2061), [`97e2b6ad7`](https://github.com/withastro/astro/commit/97e2b6ad7a6fa23e82be28b2f57cdf3f85fab112), [`4af4d8fa0`](https://github.com/withastro/astro/commit/4af4d8fa0035130fbf31c82d72777c3679bc1ca5), [`f6add3924`](https://github.com/withastro/astro/commit/f6add3924d5cd59925a6ea4bf7f2f731709bc893), [`247eb7411`](https://github.com/withastro/astro/commit/247eb7411f429317e5cd7d401a6660ee73641313)]:
+  - astro@1.6.4
+
+## 2.0.2
+
+### Patch Changes
+
+- [#5207](https://github.com/withastro/astro/pull/5207) [`c203a5cc2`](https://github.com/withastro/astro/commit/c203a5cc2f12d8c1c3e96d4f08bdd2bb2823e997) Thanks [@BeanWei](https://github.com/BeanWei)! - fix static server path for windows system
+
+## 2.0.1
+
+### Patch Changes
+
+- [#5114](https://github.com/withastro/astro/pull/5114) [`5c0c6e1ac`](https://github.com/withastro/astro/commit/5c0c6e1ac67e6341625f028794986700197334ae) Thanks [@matthewp](https://github.com/matthewp)! - Fixes finding the client folder for serving assets
+
+- [#5111](https://github.com/withastro/astro/pull/5111) [`df4d84610`](https://github.com/withastro/astro/commit/df4d84610ad2b543a37cb3bcac9887bfef0b8994) Thanks [@rishi-raj-jain](https://github.com/rishi-raj-jain)! - fix port in standalone mode
+
+## 2.0.0
+
+### Major Changes
+
+- [#5056](https://github.com/withastro/astro/pull/5056) [`e55af8a23`](https://github.com/withastro/astro/commit/e55af8a23233b6335f45b7a04b9d026990fb616c) Thanks [@matthewp](https://github.com/matthewp)! - # Standalone mode for the Node.js adapter
+
+  New in `@astrojs/node` is support for **standalone mode**. With standalone mode you can start your production server without needing to write any server JavaScript yourself. The server starts simply by running the script like so:
+
+  ```shell
+  node ./dist/server/entry.mjs
+  ```
+
+  To enable standalone mode, set the new `mode` to `'standalone'` option in your Astro config:
+
+  ```js
+  import { defineConfig } from 'astro/config';
+  import nodejs from '@astrojs/node';
+
+  export default defineConfig({
+    output: 'server',
+    adapter: nodejs({
+      mode: 'standalone',
+    }),
+  });
+  ```
+
+  See the @astrojs/node documentation to learn all of the options available in standalone mode.
+
+  ## Breaking change
+
+  This is a semver major change because the new `mode` option is required. Existing @astrojs/node users who are using their own HTTP server framework such as Express can upgrade by setting the `mode` option to `'middleware'` in order to build to a middleware mode, which is the same behavior and API as before.
+
+  ```js
+  import { defineConfig } from 'astro/config';
+  import nodejs from '@astrojs/node';
+
+  export default defineConfig({
+    output: 'server',
+    adapter: nodejs({
+      mode: 'middleware',
+    }),
+  });
+  ```
+
+### Minor Changes
+
+- [#5056](https://github.com/withastro/astro/pull/5056) [`e55af8a23`](https://github.com/withastro/astro/commit/e55af8a23233b6335f45b7a04b9d026990fb616c) Thanks [@matthewp](https://github.com/matthewp)! - # Adapter support for `astro preview`
+
+  Adapters are now about to support the `astro preview` command via a new integration option. The Node.js adapter `@astrojs/node` is the first of the built-in adapters to gain support for this. What this means is that if you are using `@astrojs/node` you can new preview your SSR app by running:
+
+  ```shell
+  npm run preview
+  ```
+
+  ## Adapter API
+
+  We will be updating the other first party Astro adapters to support preview over time. Adapters can opt in to this feature by providing the `previewEntrypoint` via the `setAdapter` function in `astro:config:done` hook. The Node.js adapter's code looks like this:
+
+  ```diff
+  export default function() {
+    return {
+  		name: '@astrojs/node',
+  		hooks: {
+  			'astro:config:done': ({ setAdapter, config }) => {
+          setAdapter({
+            name: '@astrojs/node',
+            serverEntrypoint: '@astrojs/node/server.js',
+  +          previewEntrypoint: '@astrojs/node/preview.js',
+            exports: ['handler'],
+          });
+
+          // more here
+        }
+      }
+    };
+  }
+  ```
+
+  The `previewEntrypoint` is a module in the adapter's package that is a Node.js script. This script is run when `astro preview` is run and is charged with starting up the built server. See the Node.js implementation in `@astrojs/node` to see how that is implemented.
+
+- [#5056](https://github.com/withastro/astro/pull/5056) [`e55af8a23`](https://github.com/withastro/astro/commit/e55af8a23233b6335f45b7a04b9d026990fb616c) Thanks [@matthewp](https://github.com/matthewp)! - # New build configuration
+
+  The ability to customize SSR build configuration more granularly is now available in Astro. You can now customize the output folder for `server` (the server code for SSR), `client` (your client-side JavaScript and assets), and `serverEntry` (the name of the entrypoint server module). Here are the defaults:
+
+  ```js
+  import { defineConfig } from 'astro/config';
+
+  export default defineConfig({
+    output: 'server',
+    build: {
+      server: './dist/server/',
+      client: './dist/client/',
+      serverEntry: 'entry.mjs',
+    },
+  });
+  ```
+
+  These new configuration options are only supported in SSR mode and are ignored when building to SSG (a static site).
+
+  ## Integration hook change
+
+  The integration hook `astro:build:start` includes a param `buildConfig` which includes all of these same options. You can continue to use this param in Astro 1.x, but it is deprecated in favor of the new `build.config` options. All of the built-in adapters have been updated to the new format. If you have an integration that depends on this param we suggest upgrading to do this instead:
+
+  ```js
+  export default function myIntegration() {
+    return {
+      name: 'my-integration',
+      hooks: {
+        'astro:config:setup': ({ updateConfig }) => {
+          updateConfig({
+            build: {
+              server: '...',
+            },
+          });
+        },
+      },
+    };
+  }
+  ```
+
+## 1.1.0
+
+### Minor Changes
+
+- [#4876](https://github.com/withastro/astro/pull/4876) [`d3091f89e`](https://github.com/withastro/astro/commit/d3091f89e92fcfe1ad48daca74055d54b1c853a3) Thanks [@matthewp](https://github.com/matthewp)! - Adds the Astro.cookies API
+
+  `Astro.cookies` is a new API for manipulating cookies in Astro components and API routes.
+
+  In Astro components, the new `Astro.cookies` object is a map-like object that allows you to get, set, delete, and check for a cookie's existence (`has`):
+
+  ```astro
+  ---
+  type Prefs = {
+    darkMode: boolean;
+  };
+
+  Astro.cookies.set<Prefs>(
+    'prefs',
+    { darkMode: true },
+    {
+      expires: '1 month',
+    }
+  );
+
+  const prefs = Astro.cookies.get<Prefs>('prefs').json();
+  ---
+
+  <body data-theme={prefs.darkMode ? 'dark' : 'light'}></body>
+  ```
+
+  Once you've set a cookie with Astro.cookies it will automatically be included in the outgoing response.
+
+  This API is also available with the same functionality in API routes:
+
+  ```js
+  export function post({ cookies }) {
+    cookies.set('loggedIn', false);
+
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: '/login',
+      },
+    });
+  }
+  ```
+
+  See [the RFC](https://github.com/withastro/rfcs/blob/main/proposals/0025-cookie-management.md) to learn more.
+
+## 1.0.1
+
+### Patch Changes
+
+- [#4558](https://github.com/withastro/astro/pull/4558) [`742966456`](https://github.com/withastro/astro/commit/7429664566f05ecebf6d57906f950627e62e690c) Thanks [@tony-sull](https://github.com/tony-sull)! - Adding the `withastro` keyword to include the adapters on the [Integrations Catalog](https://astro.build/integrations)
+
 ## 1.0.0
 
 ### Major Changes
@@ -51,7 +272,7 @@
   The new `Astro.clientAddress` property allows you to get the IP address of the requested user.
 
   ```astro
-  <div>Your address {Astro.clientAddress}</div>
+
   ```
 
   This property is only available when building for SSR, and only if the adapter you are using supports providing the IP address. If you attempt to access the property in a SSG app it will throw an error.

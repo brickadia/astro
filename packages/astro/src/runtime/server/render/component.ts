@@ -1,19 +1,25 @@
-import type { AstroComponentMetadata, SSRLoadedRenderer, SSRResult } from '../../../@types/astro';
+import type {
+	AstroComponentMetadata,
+	RouteData,
+	SSRLoadedRenderer,
+	SSRResult,
+} from '../../../@types/astro';
 import type { RenderInstruction } from './types.js';
 
-import { markHTMLString } from '../escape.js';
+import { AstroError, AstroErrorData } from '../../../core/errors/index.js';
+import { HTMLBytes, markHTMLString } from '../escape.js';
 import { extractDirectives, generateHydrateScript } from '../hydration.js';
 import { serializeProps } from '../serialize.js';
 import { shorthash } from '../shorthash.js';
-import { renderSlot } from './any.js';
 import {
 	isAstroComponentFactory,
 	renderAstroComponent,
 	renderTemplate,
 	renderToIterable,
 } from './astro.js';
-import { Fragment, Renderer } from './common.js';
+import { Fragment, Renderer, stringifyChunk } from './common.js';
 import { componentIsHTMLElement, renderHTMLElement } from './dom.js';
+import { renderSlot, renderSlots } from './slot.js';
 import { formatList, internalSpreadAttributes, renderElement, voidElementNames } from './util.js';
 
 const rendererAliases = new Map([['solid', 'solid-js']]);
@@ -27,13 +33,20 @@ function guessRenderers(componentUrl?: string): string[] {
 			return ['@astrojs/vue'];
 		case 'jsx':
 		case 'tsx':
-			return ['@astrojs/react', '@astrojs/preact'];
+			return ['@astrojs/react', '@astrojs/preact', '@astrojs/solid', '@astrojs/vue (jsx)'];
 		default:
-			return ['@astrojs/react', '@astrojs/preact', '@astrojs/vue', '@astrojs/svelte'];
+			return [
+				'@astrojs/react',
+				'@astrojs/preact',
+				'@astrojs/solid',
+				'@astrojs/vue',
+				'@astrojs/svelte',
+			];
 	}
 }
 
 type ComponentType = 'fragment' | 'html' | 'astro-factory' | 'unknown';
+export type ComponentIterable = AsyncIterable<string | HTMLBytes | RenderInstruction>;
 
 function getComponentType(Component: unknown): ComponentType {
 	if (Component === Fragment) {
@@ -53,9 +66,10 @@ export async function renderComponent(
 	displayName: string,
 	Component: unknown,
 	_props: Record<string | number, any>,
-	slots: any = {}
-): Promise<string | AsyncIterable<string | RenderInstruction>> {
-	Component = await Component;
+	slots: any = {},
+	route?: RouteData | undefined
+): Promise<ComponentIterable> {
+	Component = (await Component) ?? Component;
 
 	switch (getComponentType(Component)) {
 		case 'fragment': {
@@ -68,23 +82,17 @@ export async function renderComponent(
 
 		// .html components
 		case 'html': {
-			const children: Record<string, string> = {};
-			if (slots) {
-				await Promise.all(
-					Object.entries(slots).map(([key, value]) =>
-						renderSlot(result, value as string).then((output) => {
-							children[key] = output;
-						})
-					)
-				);
-			}
+			const { slotInstructions, children } = await renderSlots(result, slots);
 			const html = (Component as any).render({ slots: children });
-			return markHTMLString(html);
+			const hydrationHtml = slotInstructions
+				? slotInstructions.map((instr) => stringifyChunk(result, instr)).join('')
+				: '';
+			return markHTMLString(hydrationHtml + html);
 		}
 
 		case 'astro-factory': {
 			async function* renderAstroComponentInline(): AsyncGenerator<
-				string | RenderInstruction,
+				string | HTMLBytes | RenderInstruction,
 				void,
 				undefined
 			> {
@@ -105,7 +113,7 @@ export async function renderComponent(
 	const { renderers } = result._metadata;
 	const metadata: AstroComponentMetadata = { displayName };
 
-	const { hydration, isPage, props } = extractDirectives(_props);
+	const { hydration, isPage, props } = extractDirectives(displayName, _props);
 	let html = '';
 	let attrs: Record<string, string> | undefined = undefined;
 
@@ -115,31 +123,10 @@ export async function renderComponent(
 		metadata.componentExport = hydration.componentExport;
 		metadata.componentUrl = hydration.componentUrl;
 	}
+
 	const probableRendererNames = guessRenderers(metadata.componentUrl);
-
-	if (
-		Array.isArray(renderers) &&
-		renderers.length === 0 &&
-		typeof Component !== 'string' &&
-		!componentIsHTMLElement(Component)
-	) {
-		const message = `Unable to render ${metadata.displayName}!
-
-There are no \`integrations\` set in your \`astro.config.mjs\` file.
-Did you mean to add ${formatList(probableRendererNames.map((r) => '`' + r + '`'))}?`;
-		throw new Error(message);
-	}
-
-	const children: Record<string, string> = {};
-	if (slots) {
-		await Promise.all(
-			Object.entries(slots).map(([key, value]) =>
-				renderSlot(result, value as string).then((output) => {
-					children[key] = output;
-				})
-			)
-		);
-	}
+	const validRenderers = renderers.filter((r) => r.name !== 'astro:jsx');
+	const { children, slotInstructions } = await renderSlots(result, slots);
 
 	// Call the renderers `check` hook to see if any claim this component.
 	let renderer: SSRLoadedRenderer | undefined;
@@ -147,7 +134,14 @@ Did you mean to add ${formatList(probableRendererNames.map((r) => '`' + r + '`')
 		// If this component ran through `__astro_tag_component__`, we already know
 		// which renderer to match to and can skip the usual `check` calls.
 		// This will help us throw most relevant error message for modules with runtime errors
-		if (Component && (Component as any)[Renderer]) {
+		let isTagged = false;
+		try {
+			isTagged = Component && (Component as any)[Renderer];
+		} catch {
+			// Accessing `Component[Renderer]` may throw if `Component` is a Proxy that doesn't
+			// return the actual read-only value. In this case, ignore.
+		}
+		if (isTagged) {
 			const rendererName = (Component as any)[Renderer];
 			renderer = renderers.find(({ name }) => name === rendererName);
 		}
@@ -189,8 +183,8 @@ Did you mean to add ${formatList(probableRendererNames.map((r) => '`' + r + '`')
 			);
 		}
 		// Attempt: user only has a single renderer, default to that
-		if (!renderer && renderers.length === 1) {
-			renderer = renderers[0];
+		if (!renderer && validRenderers.length === 1) {
+			renderer = validRenderers[0];
 		}
 		// Attempt: can we guess the renderer from the export extension?
 		if (!renderer) {
@@ -204,26 +198,31 @@ Did you mean to add ${formatList(probableRendererNames.map((r) => '`' + r + '`')
 	// If no one claimed the renderer
 	if (!renderer) {
 		if (metadata.hydrate === 'only') {
-			// TODO: improve error message
-			throw new Error(`Unable to render ${metadata.displayName}!
-
-Using the \`client:only\` hydration strategy, Astro needs a hint to use the correct renderer.
-Did you mean to pass <${metadata.displayName} client:only="${probableRendererNames
-				.map((r) => r.replace('@astrojs/', ''))
-				.join('|')}" />
-`);
+			throw new AstroError({
+				...AstroErrorData.NoClientOnlyHint,
+				message: AstroErrorData.NoClientOnlyHint.message(metadata.displayName),
+				hint: AstroErrorData.NoClientOnlyHint.hint(
+					probableRendererNames.map((r) => r.replace('@astrojs/', '')).join('|')
+				),
+			});
 		} else if (typeof Component !== 'string') {
-			const matchingRenderers = renderers.filter((r) => probableRendererNames.includes(r.name));
-			const plural = renderers.length > 1;
+			const matchingRenderers = validRenderers.filter((r) =>
+				probableRendererNames.includes(r.name)
+			);
+			const plural = validRenderers.length > 1;
 			if (matchingRenderers.length === 0) {
-				throw new Error(`Unable to render ${metadata.displayName}!
-
-There ${plural ? 'are' : 'is'} ${renderers.length} renderer${
-					plural ? 's' : ''
-				} configured in your \`astro.config.mjs\` file,
-but ${plural ? 'none were' : 'it was not'} able to server-side render ${metadata.displayName}.
-
-Did you mean to enable ${formatList(probableRendererNames.map((r) => '`' + r + '`'))}?`);
+				throw new AstroError({
+					...AstroErrorData.NoMatchingRenderer,
+					message: AstroErrorData.NoMatchingRenderer.message(
+						metadata.displayName,
+						metadata?.componentUrl?.split('.').pop(),
+						plural,
+						validRenderers.length
+					),
+					hint: AstroErrorData.NoMatchingRenderer.hint(
+						formatList(probableRendererNames.map((r) => '`' + r + '`'))
+					),
+				});
 			} else if (matchingRenderers.length === 1) {
 				// We already know that renderer.ssr.check() has failed
 				// but this will throw a much more descriptive error!
@@ -271,9 +270,14 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 		renderer.name !== '@astrojs/lit' &&
 		metadata.hydrate
 	) {
-		throw new Error(
-			`${metadata.displayName} component has a \`client:${metadata.hydrate}\` directive, but no client entrypoint was provided by ${renderer.name}!`
-		);
+		throw new AstroError({
+			...AstroErrorData.NoClientEntrypoint,
+			message: AstroErrorData.NoClientEntrypoint.message(
+				displayName,
+				metadata.hydrate,
+				renderer.name
+			),
+		});
 	}
 
 	// This is a custom element without a renderer. Because of that, render it
@@ -294,16 +298,24 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 	}
 
 	if (!hydration) {
-		if (isPage || renderer?.name === 'astro:jsx') {
-			return html;
-		}
-		return markHTMLString(html.replace(/\<\/?astro-slot\>/g, ''));
+		return (async function* () {
+			if (slotInstructions) {
+				yield* slotInstructions;
+			}
+
+			if (isPage || renderer?.name === 'astro:jsx') {
+				yield html;
+			} else {
+				yield markHTMLString(html.replace(/\<\/?astro-slot\>/g, ''));
+			}
+		})();
 	}
 
 	// Include componentExport name, componentUrl, and props in hash to dedupe identical islands
 	const astroId = shorthash(
 		`<!--${metadata.componentExport!.value}:${metadata.componentUrl}-->\n${html}\n${serializeProps(
-			props
+			props,
+			metadata
 		)}`
 	);
 
@@ -344,6 +356,9 @@ If you're still stuck, please open an issue on GitHub or join us at https://astr
 	}
 
 	async function* renderAll() {
+		if (slotInstructions) {
+			yield* slotInstructions;
+		}
 		yield { type: 'directive', hydration, result };
 		yield markHTMLString(renderElement('astro-island', island, false));
 	}

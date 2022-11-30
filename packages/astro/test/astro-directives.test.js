@@ -19,14 +19,14 @@ describe('Directives', async () => {
 		let i = 0;
 		for (const script of $('script').toArray()) {
 			// Wrap script in scope ({}) to avoid redeclaration errors
-			expect($(script).text().at(0)).to.equal('{');
-			expect($(script).text().at(-1)).to.equal('}');
+			expect($(script).text().startsWith('(function(){')).to.equal(true);
+			expect($(script).text().endsWith('})();')).to.equal(true);
 			if (i < 2) {
 				// Inline defined variables
-				expect($(script).toString()).to.include('let foo = "bar"');
+				expect($(script).toString()).to.include('const foo = "bar"');
 			} else {
 				// Convert invalid keys to valid identifiers
-				expect($(script).toString()).to.include('let dashCase = "bar"');
+				expect($(script).toString()).to.include('const dashCase = "bar"');
 			}
 			i++;
 		}
@@ -36,7 +36,8 @@ describe('Directives', async () => {
 		const html = await fixture.readFile('/define-vars/index.html');
 		const $ = cheerio.load(html);
 
-		expect($('style')).to.have.lengthOf(2);
+		// All styles should be bundled
+		expect($('style')).to.have.lengthOf(0);
 
 		// Inject style attribute on top-level element in page
 		expect($('html').attr('style').toString()).to.include('--bg: white;');

@@ -4,7 +4,7 @@ import { viteID } from '../dist/core/util.js';
  *
  * @returns {import('../src/@types/astro').AstroIntegration}
  */
-export default function ({ provideAddress } = { provideAddress: true }) {
+export default function ({ provideAddress = true, extendAdapter } = { provideAddress: true }) {
 	return {
 		name: 'my-ssr-adapter',
 		hooks: {
@@ -25,9 +25,23 @@ export default function ({ provideAddress } = { provideAddress: true }) {
 									if (id === '@my-ssr') {
 										return `
 											import { App } from 'astro/app';
+											import fs from 'fs';
 
 											class MyApp extends App {
-												render(request, routeData) {
+												#manifest = null;
+												constructor(manifest, streaming) {
+													super(manifest, streaming);
+													this.#manifest = manifest;
+												}
+
+												async render(request, routeData) {
+													const url = new URL(request.url);
+													if(this.#manifest.assets.has(url.pathname)) {
+														const filePath = new URL('../client/' + this.removeBase(url.pathname), import.meta.url);
+														const data = await fs.promises.readFile(filePath);
+														return new Response(data);
+													}
+
 													${provideAddress ? `request[Symbol.for('astro.clientAddress')] = '0.0.0.0';` : ''}
 													return super.render(request, routeData);
 												}
@@ -52,6 +66,7 @@ export default function ({ provideAddress } = { provideAddress: true }) {
 					name: 'my-ssr-adapter',
 					serverEntrypoint: '@my-ssr',
 					exports: ['manifest', 'createApp'],
+					...extendAdapter,
 				});
 			},
 		},

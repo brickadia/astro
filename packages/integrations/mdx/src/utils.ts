@@ -1,9 +1,8 @@
 import type { Options as AcornOpts } from 'acorn';
 import { parse } from 'acorn';
 import type { AstroConfig, SSRError } from 'astro';
-import type { MdxjsEsm } from 'mdast-util-mdx';
-
 import matter from 'gray-matter';
+import type { MdxjsEsm } from 'mdast-util-mdx';
 
 function appendForwardSlash(path: string) {
 	return path.endsWith('/') ? path : path + '/';
@@ -82,4 +81,17 @@ export function jsToTreeNode(
 			},
 		},
 	};
+}
+
+// TODO: remove for 1.0
+export function handleExtendsNotSupported(pluginConfig: any) {
+	if (
+		typeof pluginConfig === 'object' &&
+		pluginConfig !== null &&
+		(pluginConfig as any).hasOwnProperty('extends')
+	) {
+		throw new Error(
+			`[MDX] The "extends" plugin option is no longer supported! Astro now extends your project's \`markdown\` plugin configuration by default. To customize this behavior, see the \`extendPlugins\` option instead: https://docs.astro.build/en/guides/integrations-guide/mdx/#extendplugins`
+		);
+	}
 }

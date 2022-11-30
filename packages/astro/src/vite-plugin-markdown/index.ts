@@ -1,29 +1,56 @@
 import { renderMarkdown } from '@astrojs/markdown-remark';
 import fs from 'fs';
 import matter from 'gray-matter';
+import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
-import type { AstroConfig } from '../@types/astro';
-import { collectErrorMetadata } from '../core/errors.js';
+import { normalizePath } from 'vite';
+import type { AstroSettings } from '../@types/astro';
+import { AstroErrorData, MarkdownError } from '../core/errors/index.js';
 import type { LogOptions } from '../core/logger/core.js';
 import { warn } from '../core/logger/core.js';
+import { isMarkdownFile } from '../core/util.js';
 import type { PluginMetadata } from '../vite-plugin-astro/types.js';
 import { getFileInfo, safelyGetAstroData } from '../vite-plugin-utils/index.js';
 
 interface AstroPluginOptions {
-	config: AstroConfig;
+	settings: AstroSettings;
 	logging: LogOptions;
 }
 
 function safeMatter(source: string, id: string) {
 	try {
 		return matter(source);
-	} catch (e) {
-		(e as any).id = id;
-		throw collectErrorMetadata(e);
+	} catch (err: any) {
+		const markdownError = new MarkdownError({
+			code: AstroErrorData.UnknownMarkdownError.code,
+			message: err.message,
+			stack: err.stack,
+			location: {
+				file: id,
+			},
+		});
+
+		if (err.name === 'YAMLException') {
+			markdownError.setErrorCode(AstroErrorData.MarkdownFrontmatterParseError.code);
+			markdownError.setLocation({
+				file: id,
+				line: err.mark.line,
+				column: err.mark.column,
+			});
+
+			markdownError.setMessage(err.reason);
+		}
+
+		throw markdownError;
 	}
 }
 
-export default function markdown({ config, logging }: AstroPluginOptions): Plugin {
+// absolute path of "astro/jsx-runtime"
+const astroJsxRuntimeModulePath = normalizePath(
+	fileURLToPath(new URL('../jsx-runtime/index.js', import.meta.url))
+);
+
+export default function markdown({ settings, logging }: AstroPluginOptions): Plugin {
 	return {
 		enforce: 'pre',
 		name: 'astro:markdown',
@@ -32,12 +59,12 @@ export default function markdown({ config, logging }: AstroPluginOptions): Plugi
 		// passing to the transform hook. This lets us get the truly raw value
 		// to escape "import.meta.env" ourselves.
 		async load(id) {
-			if (id.endsWith('.md')) {
-				const { fileId, fileUrl } = getFileInfo(id, config);
+			if (isMarkdownFile(id)) {
+				const { fileId, fileUrl } = getFileInfo(id, settings.config);
 				const rawFile = await fs.promises.readFile(fileId, 'utf-8');
 				const raw = safeMatter(rawFile, id);
 				const renderResult = await renderMarkdown(raw.content, {
-					...config.markdown,
+					...settings.config.markdown,
 					fileURL: new URL(`file://${fileId}`),
 					isAstroFlavoredMd: false,
 				} as any);
@@ -56,12 +83,12 @@ export default function markdown({ config, logging }: AstroPluginOptions): Plugi
 					warn(
 						logging,
 						'markdown',
-						`[${id}] Astro now supports MDX! Support for components in ".md" files using the "setup" frontmatter is no longer enabled by default. Migrate this file to MDX or add the "legacy.astroFlavoredMarkdown" config flag to re-enable support.`
+						`[${id}] Astro now supports MDX! Support for components in ".md" (or alternative extensions like ".markdown") files using the "setup" frontmatter is no longer enabled by default. Migrate this file to MDX or add the "legacy.astroFlavoredMarkdown" config flag to re-enable support.`
 					);
 				}
 
 				const code = escapeViteEnvReferences(`
-				import { Fragment, jsx as h } from 'astro/jsx-runtime';
+				import { Fragment, jsx as h } from '${astroJsxRuntimeModulePath}';
 				${layout ? `import Layout from ${JSON.stringify(layout)};` : ''}
 
 				const html = ${JSON.stringify(html)};

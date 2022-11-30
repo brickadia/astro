@@ -1,12 +1,83 @@
+import { doWork } from '@altano/tiny-async-pool';
+import type { AstroConfig } from 'astro';
+import CachePolicy from 'http-cache-semantics';
 import { bgGreen, black, cyan, dim, green } from 'kleur/colors';
 import fs from 'node:fs/promises';
+import OS from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OUTPUT_DIR } from '../constants.js';
 import type { SSRImageService, TransformOptions } from '../loaders/index.js';
-import { isRemoteImage, loadLocalImage, loadRemoteImage } from '../utils/images.js';
 import { debug, info, LoggerLevel, warn } from '../utils/logger.js';
-import { ensureDir } from '../utils/paths.js';
+import { isRemoteImage } from '../utils/paths.js';
+import { ImageCache } from './cache.js';
+
+async function loadLocalImage(src: string | URL) {
+	try {
+		const data = await fs.readFile(src);
+
+		// Vite's file hash will change if the file is changed at all,
+		// we can safely cache local images here.
+		const timeToLive = new Date();
+		timeToLive.setFullYear(timeToLive.getFullYear() + 1);
+
+		return {
+			data,
+			expires: timeToLive.getTime(),
+		};
+	} catch {
+		return undefined;
+	}
+}
+
+function webToCachePolicyRequest({ url, method, headers: _headers }: Request): CachePolicy.Request {
+	const headers: CachePolicy.Headers = {};
+	for (const [key, value] of _headers) {
+		headers[key] = value;
+	}
+	return {
+		method,
+		url,
+		headers,
+	};
+}
+
+function webToCachePolicyResponse({ status, headers: _headers }: Response): CachePolicy.Response {
+	const headers: CachePolicy.Headers = {};
+	for (const [key, value] of _headers) {
+		headers[key] = value;
+	}
+	return {
+		status,
+		headers,
+	};
+}
+
+async function loadRemoteImage(src: string) {
+	try {
+		if (src.startsWith('//')) {
+			src = `https:${src}`;
+		}
+
+		const req = new Request(src);
+		const res = await fetch(req);
+
+		if (!res.ok) {
+			return undefined;
+		}
+
+		// calculate an expiration date based on the response's TTL
+		const policy = new CachePolicy(webToCachePolicyRequest(req), webToCachePolicyResponse(res));
+		const expires = policy.storable() ? policy.timeToLive() : 0;
+
+		return {
+			data: Buffer.from(await res.arrayBuffer()),
+			expires: Date.now() + expires,
+		};
+	} catch (err: unknown) {
+		console.error(err);
+		return undefined;
+	}
+}
 
 function getTimeStat(timeStart: number, timeEnd: number) {
 	const buildTime = timeEnd - timeStart;
@@ -16,97 +87,140 @@ function getTimeStat(timeStart: number, timeEnd: number) {
 export interface SSGBuildParams {
 	loader: SSRImageService;
 	staticImages: Map<string, Map<string, TransformOptions>>;
-	srcDir: URL;
+	config: AstroConfig;
 	outDir: URL;
 	logLevel: LoggerLevel;
+	cacheDir?: URL;
 }
 
-export async function ssgBuild({ loader, staticImages, srcDir, outDir, logLevel }: SSGBuildParams) {
+export async function ssgBuild({
+	loader,
+	staticImages,
+	config,
+	outDir,
+	logLevel,
+	cacheDir,
+}: SSGBuildParams) {
+	let cache: ImageCache | undefined = undefined;
+
+	if (cacheDir) {
+		cache = new ImageCache(cacheDir, logLevel);
+		await cache.init();
+	}
+
 	const timer = performance.now();
+	const cpuCount = OS.cpus().length;
 
 	info({
 		level: logLevel,
 		prefix: false,
 		message: `${bgGreen(
-			black(` optimizing ${staticImages.size} image${staticImages.size > 1 ? 's' : ''} `)
+			black(
+				` optimizing ${staticImages.size} image${
+					staticImages.size > 1 ? 's' : ''
+				} in batches of ${cpuCount} `
+			)
 		)}`,
 	});
 
-	const inputFiles = new Set<string>();
-
-	// process transforms one original image file at a time
-	for (const [src, transformsMap] of staticImages) {
+	async function processStaticImage([src, transformsMap]: [
+		string,
+		Map<string, TransformOptions>
+	]): Promise<void> {
 		let inputFile: string | undefined = undefined;
 		let inputBuffer: Buffer | undefined = undefined;
 
+		// tracks the cache duration for the original source image
+		let expires = 0;
+
+		// Vite will prefix a hashed image with the base path, we need to strip this
+		// off to find the actual file relative to /dist
+		if (config.base && src.startsWith(config.base)) {
+			src = src.substring(config.base.length - 1);
+		}
+
 		if (isRemoteImage(src)) {
 			// try to load the remote image
-			inputBuffer = await loadRemoteImage(src);
-		} else {
-			const inputFileURL = new URL(`.${src}`, srcDir);
-			inputFile = fileURLToPath(inputFileURL);
-			inputBuffer = await loadLocalImage(inputFile);
+			const res = await loadRemoteImage(src);
 
-			// track the local file used so the original can be copied over
-			inputFiles.add(inputFile);
+			inputBuffer = res?.data;
+			expires = res?.expires || 0;
+		} else {
+			const inputFileURL = new URL(`.${src}`, outDir);
+			inputFile = fileURLToPath(inputFileURL);
+
+			const res = await loadLocalImage(inputFile);
+			inputBuffer = res?.data;
+			expires = res?.expires || 0;
 		}
 
 		if (!inputBuffer) {
 			// eslint-disable-next-line no-console
 			warn({ level: logLevel, message: `"${src}" image could not be fetched` });
-			continue;
+			return;
 		}
 
 		const transforms = Array.from(transformsMap.entries());
 
-		debug({ level: logLevel, prefix: false, message: `${green('▶')} ${src}` });
+		debug({ level: logLevel, prefix: false, message: `${green('▶')} transforming ${src}` });
 		let timeStart = performance.now();
 
-		if (inputFile) {
-			const to = inputFile.replace(fileURLToPath(srcDir), fileURLToPath(outDir));
-			await ensureDir(path.dirname(to));
-			await fs.copyFile(inputFile, to);
-
-			const timeEnd = performance.now();
-			const timeChange = getTimeStat(timeStart, timeEnd);
-			const timeIncrease = `(+${timeChange})`;
-			const pathRelative = inputFile.replace(fileURLToPath(srcDir), '');
-			debug({
-				level: logLevel,
-				prefix: false,
-				message: `  ${cyan('└─')} ${dim(`(original) ${pathRelative}`)} ${dim(timeIncrease)}`,
-			});
-		}
-
-		// process each transformed versiono of the
+		// process each transformed version
 		for (const [filename, transform] of transforms) {
 			timeStart = performance.now();
 			let outputFile: string;
+			let outputFileURL: URL;
 
 			if (isRemoteImage(src)) {
-				const outputFileURL = new URL(path.join('./', OUTPUT_DIR, path.basename(filename)), outDir);
+				outputFileURL = new URL(path.join('./assets', path.basename(filename)), outDir);
 				outputFile = fileURLToPath(outputFileURL);
 			} else {
-				const outputFileURL = new URL(path.join('./', OUTPUT_DIR, filename), outDir);
+				outputFileURL = new URL(path.join('./assets', filename), outDir);
 				outputFile = fileURLToPath(outputFileURL);
 			}
 
-			const { data } = await loader.transform(inputBuffer, transform);
+			const pathRelative = outputFile.replace(fileURLToPath(outDir), '');
 
-			ensureDir(path.dirname(outputFile));
+			let data: Buffer | undefined;
 
+			// try to load the transformed image from cache, if available
+			if (cache?.has(pathRelative)) {
+				data = await cache.get(pathRelative);
+			}
+
+			// a valid cache file wasn't found, transform the image and cache it
+			if (!data) {
+				const transformed = await loader.transform(inputBuffer, transform);
+				data = transformed.data;
+
+				// cache the image, if available
+				if (cache) {
+					await cache.set(pathRelative, data, { expires });
+				}
+			}
+
+			const outputFolder = new URL('./', outputFileURL);
+			await fs.mkdir(outputFolder, { recursive: true });
 			await fs.writeFile(outputFile, data);
 
 			const timeEnd = performance.now();
 			const timeChange = getTimeStat(timeStart, timeEnd);
 			const timeIncrease = `(+${timeChange})`;
-			const pathRelative = outputFile.replace(fileURLToPath(outDir), '');
+
 			debug({
 				level: logLevel,
 				prefix: false,
-				message: `  ${cyan('└─')} ${dim(pathRelative)} ${dim(timeIncrease)}`,
+				message: `  ${cyan('created')} ${dim(pathRelative)} ${dim(timeIncrease)}`,
 			});
 		}
+	}
+
+	// transform each original image file in batches
+	await doWork(cpuCount, staticImages, processStaticImage);
+
+	// saves the cache's JSON manifest to file
+	if (cache) {
+		await cache.finalize();
 	}
 
 	info({

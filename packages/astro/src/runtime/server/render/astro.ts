@@ -2,10 +2,11 @@ import type { SSRResult } from '../../../@types/astro';
 import type { AstroComponentFactory } from './index';
 import type { RenderInstruction } from './types';
 
-import { markHTMLString } from '../escape.js';
+import { HTMLBytes, markHTMLString } from '../escape.js';
 import { HydrationDirectiveProps } from '../hydration.js';
+import { isPromise } from '../util.js';
 import { renderChild } from './any.js';
-import { stringifyChunk } from './common.js';
+import { HTMLParts } from './common.js';
 
 // In dev mode, check props and make sure they are valid for an Astro component
 function validateComponentProps(props: any, displayName: string) {
@@ -26,10 +27,25 @@ function validateComponentProps(props: any, displayName: string) {
 export class AstroComponent {
 	private htmlParts: TemplateStringsArray;
 	private expressions: any[];
+	private error: Error | undefined;
 
 	constructor(htmlParts: TemplateStringsArray, expressions: any[]) {
 		this.htmlParts = htmlParts;
-		this.expressions = expressions;
+		this.error = undefined;
+		this.expressions = expressions.map((expression) => {
+			// Wrap Promise expressions so we can catch errors
+			// There can only be 1 error that we rethrow from an Astro component,
+			// so this keeps track of whether or not we have already done so.
+			if (isPromise(expression)) {
+				return Promise.resolve(expression).catch((err) => {
+					if (!this.error) {
+						this.error = err;
+						throw err;
+					}
+				});
+			}
+			return expression;
+		});
 	}
 
 	get [Symbol.toStringTag]() {
@@ -57,12 +73,12 @@ export function isAstroComponent(obj: any): obj is AstroComponent {
 }
 
 export function isAstroComponentFactory(obj: any): obj is AstroComponentFactory {
-	return obj == null ? false : !!obj.isAstroComponentFactory;
+	return obj == null ? false : obj.isAstroComponentFactory === true;
 }
 
 export async function* renderAstroComponent(
 	component: InstanceType<typeof AstroComponent>
-): AsyncIterable<string | RenderInstruction> {
+): AsyncIterable<string | HTMLBytes | RenderInstruction> {
 	for await (const value of component) {
 		if (value || value === 0) {
 			for await (const chunk of renderChild(value)) {
@@ -95,11 +111,11 @@ export async function renderToString(
 		throw response;
 	}
 
-	let html = '';
+	let parts = new HTMLParts();
 	for await (const chunk of renderAstroComponent(Component)) {
-		html += stringifyChunk(result, chunk);
+		parts.append(chunk, result);
 	}
-	return html;
+	return parts.toString();
 }
 
 export async function renderToIterable(
@@ -108,7 +124,7 @@ export async function renderToIterable(
 	displayName: string,
 	props: any,
 	children: any
-): Promise<AsyncIterable<string | RenderInstruction>> {
+): Promise<AsyncIterable<string | HTMLBytes | RenderInstruction>> {
 	validateComponentProps(props, displayName);
 	const Component = await componentFactory(result, props, children);
 

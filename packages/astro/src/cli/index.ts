@@ -1,23 +1,25 @@
 /* eslint-disable no-console */
-
+import fs from 'fs';
 import * as colors from 'kleur/colors';
+import type { Arguments as Flags } from 'yargs-parser';
 import yargs from 'yargs-parser';
 import { z } from 'zod';
-import add from '../core/add/index.js';
-import build from '../core/build/index.js';
-import { openConfig } from '../core/config.js';
-import devServer from '../core/dev/index.js';
-import { collectErrorMetadata } from '../core/errors.js';
-import { debug, info, LogOptions, warn } from '../core/logger/core.js';
+import {
+	createSettings,
+	openConfig,
+	resolveConfigPath,
+	resolveFlags,
+} from '../core/config/index.js';
+import { ASTRO_VERSION } from '../core/constants.js';
+import { collectErrorMetadata } from '../core/errors/dev/index.js';
+import { createSafeError } from '../core/errors/index.js';
+import { debug, error, info, LogOptions } from '../core/logger/core.js';
 import { enableVerboseLogging, nodeLogDestination } from '../core/logger/node.js';
 import { formatConfigErrorMessage, formatErrorMessage, printHelp } from '../core/messages.js';
-import preview from '../core/preview/index.js';
-import { ASTRO_VERSION, createSafeError } from '../core/util.js';
 import * as event from '../events/index.js';
 import { eventConfigError, eventError, telemetry } from '../events/index.js';
 import { check } from './check/index.js';
 import { openInBrowser } from './open.js';
-import * as telemetryHandler from './telemetry.js';
 
 type Arguments = yargs.Arguments;
 type CLICommand =
@@ -51,6 +53,8 @@ function printAstroHelp() {
 			'Global Flags': [
 				['--config <path>', 'Specify your config file.'],
 				['--root <path>', 'Specify your project root folder.'],
+				['--site <url>', 'Specify your project site.'],
+				['--base <pathname>', 'Specify your project base.'],
 				['--verbose', 'Enable verbose logging.'],
 				['--silent', 'Disable all logging.'],
 				['--version', 'Show the version number and exit.'],
@@ -79,6 +83,19 @@ function resolveCommand(flags: Arguments): CLICommand {
 		return cmd as CLICommand;
 	}
 	return 'help';
+}
+
+async function handleConfigError(
+	e: any,
+	{ cwd, flags, logging }: { cwd?: string; flags?: Flags; logging: LogOptions }
+) {
+	const path = await resolveConfigPath({ cwd, flags, fs });
+	if (e instanceof Error) {
+		if (path) {
+			error(logging, 'astro', `Unable to load ${colors.bold(path)}\n`);
+		}
+		console.error(formatErrorMessage(collectErrorMetadata(e)) + '\n');
+	}
 }
 
 /**
@@ -116,6 +133,8 @@ async function runCommand(cmd: string, flags: yargs.Arguments) {
 	//
 	switch (cmd) {
 		case 'add': {
+			const { default: add } = await import('../core/add/index.js');
+
 			telemetry.record(event.eventCliSession(cmd));
 			const packages = flags._.slice(3) as string[];
 			return await add(packages, { cwd: root, flags, logging, telemetry });
@@ -125,6 +144,8 @@ async function runCommand(cmd: string, flags: yargs.Arguments) {
 			return await openInBrowser('https://docs.astro.build/');
 		}
 		case 'telemetry': {
+			const telemetryHandler = await import('./telemetry.js');
+
 			// Do not track session start, since the user may be trying to enable,
 			// disable, or modify telemetry settings.
 			const subcommand = flags._[3]?.toString();
@@ -132,60 +153,59 @@ async function runCommand(cmd: string, flags: yargs.Arguments) {
 		}
 	}
 
-	let { astroConfig, userConfig, userConfigPath } = await openConfig({
+	let { astroConfig: initialAstroConfig, userConfig: initialUserConfig } = await openConfig({
 		cwd: root,
 		flags,
 		cmd,
 		logging,
+	}).catch(async (e) => {
+		await handleConfigError(e, { cwd: root, flags, logging });
+		return {} as any;
 	});
-	telemetry.record(event.eventCliSession(cmd, userConfig, flags));
+	if (!initialAstroConfig) return;
+	telemetry.record(event.eventCliSession(cmd, initialUserConfig, flags));
+	let settings = createSettings(initialAstroConfig, root);
 
 	// Common CLI Commands:
 	// These commands run normally. All commands are assumed to have been handled
 	// by the end of this switch statement.
 	switch (cmd) {
 		case 'dev': {
-			async function startDevServer() {
-				const { watcher, stop } = await devServer(astroConfig, { logging, telemetry });
+			const { default: devServer } = await import('../core/dev/index.js');
 
-				watcher.on('change', logRestartServerOnConfigChange);
-				watcher.on('unlink', logRestartServerOnConfigChange);
-				function logRestartServerOnConfigChange(changedFile: string) {
-					if (userConfigPath === changedFile) {
-						warn(logging, 'astro', 'Astro config updated. Restart server to see changes!');
-					}
-				}
+			const configFlag = resolveFlags(flags).config;
+			const configFlagPath = configFlag
+				? await resolveConfigPath({ cwd: root, flags, fs })
+				: undefined;
 
-				watcher.on('add', async function restartServerOnNewConfigFile(addedFile: string) {
-					// if there was not a config before, attempt to resolve
-					if (!userConfigPath && addedFile.includes('astro.config')) {
-						const addedConfig = await openConfig({ cwd: root, flags, cmd, logging });
-						if (addedConfig.userConfigPath) {
-							info(logging, 'astro', 'Astro config detected. Restarting server...');
-							astroConfig = addedConfig.astroConfig;
-							userConfig = addedConfig.userConfig;
-							userConfigPath = addedConfig.userConfigPath;
-							await stop();
-							await startDevServer();
-						}
-					}
-				});
-			}
-			await startDevServer();
+			await devServer(settings, {
+				configFlag,
+				configFlagPath,
+				logging,
+				telemetry,
+				handleConfigError(e) {
+					handleConfigError(e, { cwd: root, flags, logging });
+					info(logging, 'astro', 'Continuing with previous valid configuration\n');
+				},
+			});
 			return await new Promise(() => {}); // lives forever
 		}
 
 		case 'build': {
-			return await build(astroConfig, { logging, telemetry });
+			const { default: build } = await import('../core/build/index.js');
+
+			return await build(settings, { ...flags, logging, telemetry });
 		}
 
 		case 'check': {
-			const ret = await check(astroConfig);
+			const ret = await check(settings);
 			return process.exit(ret);
 		}
 
 		case 'preview': {
-			const server = await preview(astroConfig, { logging, telemetry });
+			const { default: preview } = await import('../core/preview/index.js');
+
+			const server = await preview(settings, { logging, telemetry });
 			return await server.closed(); // keep alive until the server is closed
 		}
 	}

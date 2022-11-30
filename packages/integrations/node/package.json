@@ -1,7 +1,7 @@
 {
   "name": "@astrojs/node",
   "description": "Deploy your site to a Node.js server",
-  "version": "1.0.0",
+  "version": "3.1.0",
   "type": "module",
   "types": "./dist/index.d.ts",
   "author": "withastro",
@@ -12,6 +12,7 @@
     "directory": "packages/integrations/node"
   },
   "keywords": [
+    "withastro",
     "astro-adapter"
   ],
   "bugs": "https://github.com/withastro/astro/issues",
@@ -19,6 +20,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./server.js": "./dist/server.js",
+    "./preview.js": "./dist/preview.js",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -28,11 +30,19 @@
     "test": "mocha --exit --timeout 20000 test/"
   },
   "dependencies": {
-    "@astrojs/webapi": "^1.0.0"
+    "@astrojs/webapi": "^1.1.1",
+    "send": "^0.18.0"
+  },
+  "peerDependencies": {
+    "astro": "^1.6.11"
   },
   "devDependencies": {
+    "@types/node-fetch": "^2.6.2",
+    "@types/send": "^0.17.1",
     "astro": "workspace:*",
     "astro-scripts": "workspace:*",
+    "chai": "^4.3.6",
+    "mocha": "^9.2.2",
     "node-mocks-http": "^1.11.0"
   }
 }

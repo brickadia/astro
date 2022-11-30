@@ -1,5 +1,25 @@
 # @astrojs/prefetch
 
+## 0.1.1
+
+### Patch Changes
+
+- [#5244](https://github.com/withastro/astro/pull/5244) [`6ad91bd80`](https://github.com/withastro/astro/commit/6ad91bd80dae935b67a5c18b8dfbb95f2cfe10ef) Thanks [@deeprobin](https://github.com/deeprobin)! - Do not prefetch if browser is offline or uses 3G
+
+- [#5271](https://github.com/withastro/astro/pull/5271) [`b6afe2c1d`](https://github.com/withastro/astro/commit/b6afe2c1db613aabf3139fb58e0fc2ab60322f37) Thanks [@tony-sull](https://github.com/tony-sull)! - Adds additional package.json keywords used for discoverability in the Integrations catalog
+
+## 0.1.0
+
+### Minor Changes
+
+- [#5125](https://github.com/withastro/astro/pull/5125) [`5a674f976`](https://github.com/withastro/astro/commit/5a674f976d6138ec5c87441a579c2ccf37713e73) Thanks [@Jelenkee](https://github.com/Jelenkee)! - Prefetch CSS files once
+
+## 0.0.8
+
+### Patch Changes
+
+- [#5009](https://github.com/withastro/astro/pull/5009) [`92b27e9c9`](https://github.com/withastro/astro/commit/92b27e9c9253cea3d00f1f81223de19ff75c2c74) Thanks [@panwauu](https://github.com/panwauu)! - Prevents prefetching the current page
+
 ## 0.0.7
 
 ### Patch Changes

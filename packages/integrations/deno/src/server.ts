@@ -26,12 +26,37 @@ export function start(manifest: SSRManifest, options: Options) {
 		if (app.match(request)) {
 			let ip = connInfo?.remoteAddr?.hostname;
 			Reflect.set(request, Symbol.for('astro.clientAddress'), ip);
-			return await app.render(request);
+			const response = await app.render(request);
+			if (app.setCookieHeaders) {
+				for (const setCookieHeader of app.setCookieHeaders(response)) {
+					response.headers.append('Set-Cookie', setCookieHeader);
+				}
+			}
+			return response;
 		}
 
+		// If the request path wasn't found in astro,
+		// try to fetch a static file instead
 		const url = new URL(request.url);
-		const localPath = new URL('.' + url.pathname, clientRoot);
-		return fetch(localPath.toString());
+		const localPath = new URL('./' + app.removeBase(url.pathname), clientRoot);
+		const fileResp = await fetch(localPath.toString());
+
+		// If the static file can't be found
+		if (fileResp.status == 404) {
+			// Render the astro custom 404 page
+			const response = await app.render(request);
+
+			if (app.setCookieHeaders) {
+				for (const setCookieHeader of app.setCookieHeaders(response)) {
+					response.headers.append('Set-Cookie', setCookieHeader);
+				}
+			}
+			return response;
+
+			// If the static file is found
+		} else {
+			return fileResp;
+		}
 	};
 
 	const port = options.port ?? 8085;

@@ -6,8 +6,8 @@ on:
       - main
   pull_request:
     paths-ignore:
-      - '.vscode/**'
-      - '**/*.md'
+      - ".vscode/**"
+      - "**/*.md"
 
 # Automatically cancel older in-progress jobs on the same branch
 concurrency:
@@ -23,10 +23,10 @@ env:
   FORCE_COLOR: true
   ASTRO_TELEMETRY_DISABLED: true
 
-
 jobs:
   lint:
     name: Lint
+    timeout-minutes: 3
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -39,7 +39,7 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 16
-          cache: 'pnpm'
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install
@@ -55,28 +55,30 @@ jobs:
       # Otherwise, run lint autofixer
       - name: Lint
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.owner.login == github.repository_owner }}
-        uses: wearerequired/lint-action@v1.11.1
+        uses: wearerequired/lint-action@v2.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           eslint: true
+          eslint_extensions: js,ts,cts,mts,cjs,mjs
           prettier: false
-          auto_fix: true
-          git_name: github-actions[bot]
-          git_email: github-actions[bot]@users.noreply.github.com
-          commit_message: 'chore(lint): ${linter} fix'
+          auto_fix: false
+          git_name: fredkbot
+          git_email: fred+astrobot@astro.build
+          commit_message: "chore(lint): ${linter} fix"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           neutral_check_on_warning: true
 
       # Checks that the formatter runs successfully on all files
       # In the future, we may have this fail PRs on unformatted code
       - name: Format Check
-        run: pnpm run format --list
+        run: pnpm run format --check
 
   # Build primes out build caches for Turbo
   build:
-    name: 'Build: ${{ matrix.os }}'
+    name: "Build: ${{ matrix.os }}"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 3
     strategy:
       matrix:
         OS: [ubuntu-latest]
@@ -93,17 +95,18 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.NODE_VERSION }}
-          cache: 'pnpm'
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install
-      
+
       - name: Build Packages
         run: pnpm run build
 
   test:
-    name: 'Test: ${{ matrix.os }} (node@${{ matrix.NODE_VERSION }})'
+    name: "Test: ${{ matrix.os }} (node@${{ matrix.NODE_VERSION }})"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     needs: build
     strategy:
       matrix:
@@ -127,12 +130,12 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.NODE_VERSION }}
-          cache: 'pnpm'
+          cache: "pnpm"
 
       - name: Use Deno
         uses: denoland/setup-deno@v1
         with:
-          deno-version: v1.19.3
+          deno-version: v1.26.1
 
       - name: Install dependencies
         run: pnpm install
@@ -144,7 +147,7 @@ jobs:
         run: pnpm run test
 
   e2e:
-    name: 'Test (E2E): ${{ matrix.os }} (node@${{ matrix.NODE_VERSION }})'
+    name: "Test (E2E): ${{ matrix.os }} (node@${{ matrix.NODE_VERSION }})"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     needs: build
@@ -166,7 +169,7 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.NODE_VERSION }}
-          cache: 'pnpm'
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install
@@ -178,8 +181,9 @@ jobs:
         run: pnpm run test:e2e
 
   smoke:
-    name: 'Test (Smoke): ${{ matrix.os }} (node@${{ matrix.NODE_VERSION }})'
+    name: "Test (Smoke): ${{ matrix.os }} (node@${{ matrix.NODE_VERSION }})"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     needs: build
     strategy:
       matrix:
@@ -198,7 +202,7 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.NODE_VERSION }}
-          cache: 'pnpm'
+          cache: "pnpm"
 
       - name: Checkout docs
         uses: actions/checkout@v3

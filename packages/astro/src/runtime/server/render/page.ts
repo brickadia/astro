@@ -1,13 +1,15 @@
-import type { SSRResult } from '../../../@types/astro';
+import type { RouteData, SSRResult } from '../../../@types/astro';
+import type { ComponentIterable } from './component';
 import type { AstroComponentFactory } from './index';
 
+import { AstroError, AstroErrorData } from '../../../core/errors/index.js';
+import { isHTMLString } from '../escape.js';
 import { createResponse } from '../response.js';
 import { isAstroComponent, isAstroComponentFactory, renderAstroComponent } from './astro.js';
-import { stringifyChunk } from './common.js';
+import { chunkToByteArray, encoder, HTMLParts } from './common.js';
 import { renderComponent } from './component.js';
 import { maybeRenderHead } from './head.js';
 
-const encoder = new TextEncoder();
 const needsHeadRenderingSymbol = Symbol.for('astro.needsHeadRendering');
 
 type NonAstroPageComponent = {
@@ -19,37 +21,72 @@ function nonAstroPageNeedsHeadInjection(pageComponent: NonAstroPageComponent): b
 	return needsHeadRenderingSymbol in pageComponent && !!pageComponent[needsHeadRenderingSymbol];
 }
 
+async function iterableToHTMLBytes(
+	result: SSRResult,
+	iterable: ComponentIterable,
+	onDocTypeInjection?: (parts: HTMLParts) => Promise<void>
+): Promise<Uint8Array> {
+	const parts = new HTMLParts();
+	let i = 0;
+	for await (const chunk of iterable) {
+		if (isHTMLString(chunk)) {
+			if (i === 0) {
+				i++;
+				if (!/<!doctype html/i.test(String(chunk))) {
+					parts.append('<!DOCTYPE html>\n', result);
+					if (onDocTypeInjection) {
+						await onDocTypeInjection(parts);
+					}
+				}
+			}
+		}
+		parts.append(chunk, result);
+	}
+	return parts.toArrayBuffer();
+}
+
 export async function renderPage(
 	result: SSRResult,
 	componentFactory: AstroComponentFactory | NonAstroPageComponent,
 	props: any,
 	children: any,
-	streaming: boolean
+	streaming: boolean,
+	route?: RouteData | undefined,
+	context?: any
 ): Promise<Response> {
 	if (!isAstroComponentFactory(componentFactory)) {
 		const pageProps: Record<string, any> = { ...(props ?? {}), 'server:root': true };
-		const output = await renderComponent(
-			result,
-			componentFactory.name,
-			componentFactory,
-			pageProps,
-			null
-		);
-		let html = output.toString();
-		if (!/<!doctype html/i.test(html)) {
-			let rest = html;
-			html = `<!DOCTYPE html>`;
-			// This symbol currently exists for md components, but is something that could
-			// be added for any page-level component that's not an Astro component.
-			// to signal that head rendering is needed.
+
+		let output: ComponentIterable;
+
+		try {
+			output = await renderComponent(
+				result,
+				componentFactory.name,
+				componentFactory,
+				pageProps,
+				null,
+				route
+			);
+		} catch (e) {
+			if (AstroError.is(e) && !e.loc) {
+				e.setLocation({
+					file: route?.component,
+				});
+			}
+
+			throw e;
+		}
+
+		// Accumulate the HTML string and append the head if necessary.
+		const bytes = await iterableToHTMLBytes(result, output, async (parts) => {
 			if (nonAstroPageNeedsHeadInjection(componentFactory)) {
 				for await (let chunk of maybeRenderHead(result)) {
-					html += chunk;
+					parts.append(chunk, result);
 				}
 			}
-			html += rest;
-		}
-		const bytes = encoder.encode(html);
+		});
+
 		return new Response(bytes, {
 			headers: new Headers([
 				['Content-Type', 'text/html; charset=utf-8'],
@@ -72,18 +109,28 @@ export async function renderPage(
 						let i = 0;
 						try {
 							for await (const chunk of iterable) {
-								let html = stringifyChunk(result, chunk);
-
-								if (i === 0) {
-									if (!/<!doctype html/i.test(html)) {
-										controller.enqueue(encoder.encode('<!DOCTYPE html>\n'));
+								if (isHTMLString(chunk)) {
+									if (i === 0) {
+										if (!/<!doctype html/i.test(String(chunk))) {
+											controller.enqueue(encoder.encode('<!DOCTYPE html>\n'));
+										}
 									}
 								}
-								controller.enqueue(encoder.encode(html));
+
+								const bytes = chunkToByteArray(result, chunk);
+								controller.enqueue(bytes);
 								i++;
 							}
 							controller.close();
 						} catch (e) {
+							// We don't have a lot of information downstream, and upstream we can't catch the error properly
+							// So let's add the location here
+							if (AstroError.is(e) && !e.loc) {
+								e.setLocation({
+									file: route?.component,
+								});
+							}
+
 							controller.error(e);
 						}
 					}
@@ -91,25 +138,27 @@ export async function renderPage(
 				},
 			});
 		} else {
-			body = '';
-			let i = 0;
-			for await (const chunk of iterable) {
-				let html = stringifyChunk(result, chunk);
-				if (i === 0) {
-					if (!/<!doctype html/i.test(html)) {
-						body += '<!DOCTYPE html>\n';
-					}
-				}
-				body += html;
-				i++;
-			}
-			const bytes = encoder.encode(body);
-			headers.set('Content-Length', bytes.byteLength.toString());
+			body = await iterableToHTMLBytes(result, iterable);
+			headers.set('Content-Length', body.byteLength.toString());
 		}
 
 		let response = createResponse(body, { ...init, headers });
 		return response;
-	} else {
-		return factoryReturnValue;
 	}
+
+	// We double check if the file return a Response
+	if (!(factoryReturnValue instanceof Response)) {
+		throw new AstroError({
+			...AstroErrorData.OnlyResponseCanBeReturned,
+			message: AstroErrorData.OnlyResponseCanBeReturned.message(
+				route?.route,
+				typeof factoryReturnValue
+			),
+			location: {
+				file: route?.component,
+			},
+		});
+	}
+
+	return factoryReturnValue;
 }

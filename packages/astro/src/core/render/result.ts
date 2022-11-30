@@ -10,24 +10,28 @@ import type {
 	SSRLoadedRenderer,
 	SSRResult,
 } from '../../@types/astro';
-import { renderSlot } from '../../runtime/server/index.js';
+import { renderSlot, stringifyChunk } from '../../runtime/server/index.js';
+import { renderJSX } from '../../runtime/server/jsx.js';
+import { AstroCookies } from '../cookies/index.js';
+import { AstroError, AstroErrorData } from '../errors/index.js';
 import { LogOptions, warn } from '../logger/core.js';
 import { isScriptRequest } from './script.js';
 import { isCSSRequest } from './util.js';
 
 const clientAddressSymbol = Symbol.for('astro.clientAddress');
 
-function onlyAvailableInSSR(name: string) {
+function onlyAvailableInSSR(name: 'Astro.redirect') {
 	return function _onlyAvailableInSSR() {
-		// TODO add more guidance when we have docs and adapters.
-		throw new Error(`Oops, you are trying to use ${name}, which is only available with SSR.`);
+		switch (name) {
+			case 'Astro.redirect':
+				throw new AstroError(AstroErrorData.StaticRedirectNotAvailable);
+		}
 	};
 }
 
 export interface CreateResultArgs {
 	adapterName: string | undefined;
 	ssr: boolean;
-	streaming: boolean;
 	logging: LogOptions;
 	origin: string;
 	markdown: MarkdownRenderingOptions;
@@ -66,9 +70,10 @@ class Slots {
 		if (slots) {
 			for (const key of Object.keys(slots)) {
 				if ((this as any)[key] !== undefined) {
-					throw new Error(
-						`Unable to create a slot named "${key}". "${key}" is a reserved slot name!\nPlease update the name of this slot.`
-					);
+					throw new AstroError({
+						...AstroErrorData.ReservedSlotName,
+						message: AstroErrorData.ReservedSlotName.message(key),
+					});
 				}
 				Object.defineProperty(this, key, {
 					get() {
@@ -95,8 +100,6 @@ class Slots {
 		if (!this.has(name)) return undefined;
 		if (!cacheable) {
 			const component = await this.#slots[name]();
-			const expression = getFunctionExpression(component);
-
 			if (!Array.isArray(args)) {
 				warn(
 					this.#loggingOpts,
@@ -104,35 +107,38 @@ class Slots {
 					`Expected second parameter to be an array, received a ${typeof args}. If you're trying to pass an array as a single argument and getting unexpected results, make sure you're passing your array as a item of an array. Ex: Astro.slots.render('default', [["Hello", "World"]])`
 				);
 			} else {
+				// Astro
+				const expression = getFunctionExpression(component);
 				if (expression) {
 					const slot = expression(...args);
 					return await renderSlot(this.#result, slot).then((res) =>
 						res != null ? String(res) : res
 					);
 				}
+				// JSX
+				if (typeof component === 'function') {
+					return await renderJSX(this.#result, component(...args)).then((res) =>
+						res != null ? String(res) : res
+					);
+				}
 			}
 		}
-		const content = await renderSlot(this.#result, this.#slots[name]).then((res) =>
-			res != null ? String(res) : res
-		);
-		if (cacheable) this.#cache.set(name, content);
-		return content;
+		const content = await renderSlot(this.#result, this.#slots[name]);
+		const outHTML = stringifyChunk(this.#result, content);
+
+		if (cacheable) this.#cache.set(name, outHTML);
+		return outHTML;
 	}
 }
 
 let renderMarkdown: any = null;
 
 export function createResult(args: CreateResultArgs): SSRResult {
-	const { markdown, params, pathname, props: pageProps, renderers, request, resolve, context } = args;
+	const { markdown, params, pathname, renderers, request, resolve, context } = args;
 
 	const url = new URL(request.url);
 	const headers = new Headers();
-	if (args.streaming) {
-		headers.set('Transfer-Encoding', 'chunked');
-		headers.set('Content-Type', 'text/html');
-	} else {
-		headers.set('Content-Type', 'text/html');
-	}
+	headers.set('Content-Type', 'text/html');
 	const response: ResponseInit = {
 		status: args.status,
 		statusText: 'OK',
@@ -146,6 +152,9 @@ export function createResult(args: CreateResultArgs): SSRResult {
 		writable: false,
 	});
 
+	// Astro.cookies is defined lazily to avoid the cost on pages that do not use it.
+	let cookies: AstroCookies | undefined = undefined;
+
 	// Create the result object that will be passed into the render function.
 	// This object starts here as an empty shell (not yet the result) but then
 	// calling the render() function will populate the object with scripts, styles, etc.
@@ -153,6 +162,7 @@ export function createResult(args: CreateResultArgs): SSRResult {
 		styles: args.styles ?? new Set<SSRElement>(),
 		scripts: args.scripts ?? new Set<SSRElement>(),
 		links: args.links ?? new Set<SSRElement>(),
+		cookies,
 		/** This function returns the `Astro` faux-global */
 		createAstro(
 			astroGlobal: AstroGlobalPartial,
@@ -161,31 +171,39 @@ export function createResult(args: CreateResultArgs): SSRResult {
 		) {
 			const astroSlots = new Slots(result, slots, args.logging);
 
-			const Astro = {
+			const Astro: AstroGlobal = {
+				// @ts-expect-error set prototype
 				__proto__: astroGlobal,
 				get clientAddress() {
 					if (!(clientAddressSymbol in request)) {
 						if (args.adapterName) {
-							throw new Error(
-								`Astro.clientAddress is not available in the ${args.adapterName} adapter. File an issue with the adapter to add support.`
-							);
+							throw new AstroError({
+								...AstroErrorData.ClientAddressNotAvailable,
+								message: AstroErrorData.ClientAddressNotAvailable.message(args.adapterName),
+							});
 						} else {
-							throw new Error(
-								`Astro.clientAddress is not available in your environment. Ensure that you are using an SSR adapter that supports this feature.`
-							);
+							throw new AstroError(AstroErrorData.StaticClientAddressNotAvailable);
 						}
 					}
 
 					return Reflect.get(request, clientAddressSymbol);
+				},
+				get cookies() {
+					if (cookies) {
+						return cookies;
+					}
+					cookies = new AstroCookies(request);
+					result.cookies = cookies;
+					return cookies;
 				},
 				params,
 				props,
 				request,
 				url,
 				redirect: args.ssr
-					? (path: string) => {
+					? (path, status) => {
 							return new Response(null, {
-								status: 302,
+								status: status || 302,
 								headers: {
 									Location: path,
 								},
@@ -224,10 +242,10 @@ ${extra}`
 					// Intentionally return an empty string so that it is not relied upon.
 					return '';
 				},
-				response,
-				context,
-				slots: astroSlots,
-			} as unknown as AstroGlobal;
+				response: response as AstroGlobal['response'],
+				context: context as AstroGlobal['context'],
+				slots: astroSlots as unknown as AstroGlobal['slots'],
+			};
 
 			Object.defineProperty(Astro, 'canonicalURL', {
 				get: function () {
@@ -278,6 +296,7 @@ const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 			renderers,
 			pathname,
 			hasHydrationScript: false,
+			hasRenderedHead: false,
 			hasDirectives: new Set(),
 		},
 		response,
