@@ -221,8 +221,9 @@ function buildManifest(
 		entryModules,
 		assets: staticFiles.map(prefixAssetPath),
 		middleware: {
-			// @ts-expect-error
-			onRequest() {},
+			onRequest(_, next) {
+				return next();
+			},
 		},
 	};
 
