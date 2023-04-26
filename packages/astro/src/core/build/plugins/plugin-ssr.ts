@@ -220,11 +220,6 @@ function buildManifest(
 		renderers: [],
 		entryModules,
 		assets: staticFiles.map(prefixAssetPath),
-		middleware: {
-			onRequest(_, next) {
-				return next();
-			},
-		},
 	};
 
 	return ssrManifest;
