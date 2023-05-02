@@ -90,6 +90,9 @@ export function createAPIContext({
 			}
 		},
 	});
+	
+	console.log("createApiContext ", context.locals);
+
 	return context;
 }
 

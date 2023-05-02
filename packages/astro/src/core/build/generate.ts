@@ -439,7 +439,7 @@ async function generatePath(
 	const ctx = createRenderContext({
 		origin,
 		pathname,
-		request: createRequest({ url, headers: new Headers(), logging, ssr }),
+		request: createRequest({ url, headers: new Headers(), logging, ssr, locals: {}}),
 		componentMetadata: internals.componentMetadata,
 		scripts,
 		links,

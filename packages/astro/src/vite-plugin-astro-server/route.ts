@@ -197,7 +197,7 @@ export async function handleRoute(
 					manifest,
 					req,
 					res,
-					locals
+					locals ?? {}
 				);
 			}
 			throwIfRedirectNotAllowed(result.response, config);

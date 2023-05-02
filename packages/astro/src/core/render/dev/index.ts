@@ -189,44 +189,43 @@ export async function renderPage(options: SSROptions): Promise<Response> {
 		route: options.route,
 	});
 
-	if (options.middleware) {
-		const { env } = options;
-		const paramsAndPropsRes = await getParamsAndProps({
-			logging: env.logging,
-			mod,
-			route: ctx.route,
-			routeCache: env.routeCache,
-			pathname: ctx.pathname,
-			ssr: env.ssr,
+	const { env } = options;
+	const paramsAndPropsRes = await getParamsAndProps({
+		logging: env.logging,
+		mod,
+		route: ctx.route,
+		routeCache: env.routeCache,
+		pathname: ctx.pathname,
+		ssr: env.ssr,
+	});
+
+	if (paramsAndPropsRes === GetParamsAndPropsError.NoMatchingStaticPath) {
+		throw new AstroError({
+			...AstroErrorData.NoMatchingStaticPathFound,
+			message: AstroErrorData.NoMatchingStaticPathFound.message(ctx.pathname),
+			hint: ctx.route?.component
+				? AstroErrorData.NoMatchingStaticPathFound.hint([ctx.route?.component])
+				: '',
+		});
+	}
+
+	const [params, pageProps] = paramsAndPropsRes;
+
+	const apiContext = createAPIContext({
+		request: options.request,
+		params,
+		props: pageProps,
+		adapterName: options.env.adapterName,
+	});
+
+	if (options.middleware && options.middleware.onRequest) {
+		const onRequest = options.middleware.onRequest as MiddlewareResponseHandler;
+		const response = await callMiddleware<Response>(onRequest, apiContext, () => {
+			return coreRenderPage(mod, ctx, options.env, apiContext);
 		});
 
-		if (paramsAndPropsRes === GetParamsAndPropsError.NoMatchingStaticPath) {
-			throw new AstroError({
-				...AstroErrorData.NoMatchingStaticPathFound,
-				message: AstroErrorData.NoMatchingStaticPathFound.message(ctx.pathname),
-				hint: ctx.route?.component
-					? AstroErrorData.NoMatchingStaticPathFound.hint([ctx.route?.component])
-					: '',
-			});
-		}
-
-		if (options.middleware && options.middleware.onRequest) {
-			const [params, pageProps] = paramsAndPropsRes;
-
-			const apiContext = createAPIContext({
-				request: options.request,
-				params,
-				props: pageProps,
-				adapterName: options.env.adapterName,
-			});
-
-			const onRequest = options.middleware.onRequest as MiddlewareResponseHandler;
-			const response = await callMiddleware<Response>(onRequest, apiContext, () => {
-				return coreRenderPage(mod, ctx, options.env, apiContext);
-			});
-
-			return response;
-		}
+		return response;
 	}
-	return await coreRenderPage(mod, ctx, options.env); // NOTE: without "await", errors won’t get caught below
+
+	return await coreRenderPage(mod, ctx, options.env, apiContext); // NOTE: without "await", errors won’t get caught below
 }
