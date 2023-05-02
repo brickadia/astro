@@ -70,7 +70,5 @@ export function createRequest({
 
 	Reflect.set(request, clientLocalsSymbol, locals ?? {});
 
-	console.log("handleReq: ", request[clientLocalsSymbol]);
-
 	return request;
 }

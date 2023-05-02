@@ -125,8 +125,6 @@ export async function renderPage(
 		locals = apiContext.locals;
 	}
 
-	console.log("renderPageReal: ", locals);
-
 	const result = createResult({
 		adapterName: env.adapterName,
 		links: ctx.links,
