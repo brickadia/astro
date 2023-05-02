@@ -14,8 +14,8 @@ import { ASTRO_VERSION } from '../constants.js';
 import { AstroCookies, attachToResponse } from '../cookies/index.js';
 import { AstroError, AstroErrorData } from '../errors/index.js';
 import { warn, type LogOptions } from '../logger/core.js';
-import { getParamsAndProps, GetParamsAndPropsError, isValueSerializable } from '../render/core.js';
-import { callMiddleware } from '../middleware/index.js';
+import { getParamsAndPropsOrThrow, isValueSerializable } from '../render/core.js';
+import { callMiddleware } from '../middleware/callMiddleware.js';
 
 const clientAddressSymbol = Symbol.for('astro.clientAddress');
 const clientLocalsSymbol = Symbol.for('astro.locals');
@@ -90,36 +90,27 @@ export function createAPIContext({
 			}
 		},
 	});
-	
 	return context;
 }
 
-export async function call(
+export async function call<MiddlewareResult = Response | EndpointOutput>(
 	mod: EndpointHandler,
 	env: Environment,
 	ctx: RenderContext,
 	logging: LogOptions,
-	middleware: AstroMiddlewareInstance<Response | EndpointOutput> | undefined
+	middleware?: AstroMiddlewareInstance<MiddlewareResult> | undefined
 ): Promise<EndpointCallResult> {
-	const paramsAndPropsResp = await getParamsAndProps({
-		mod: mod as any,
-		route: ctx.route,
-		routeCache: env.routeCache,
-		pathname: ctx.pathname,
-		logging: env.logging,
-		ssr: env.ssr,
+	const [params, props] = await getParamsAndPropsOrThrow({
+		options: {
+			mod: mod as any,
+			route: ctx.route,
+			routeCache: env.routeCache,
+			pathname: ctx.pathname,
+			logging: env.logging,
+			ssr: env.ssr,
+		},
+		context: ctx,
 	});
-
-	if (paramsAndPropsResp === GetParamsAndPropsError.NoMatchingStaticPath) {
-		throw new AstroError({
-			...AstroErrorData.NoMatchingStaticPathFound,
-			message: AstroErrorData.NoMatchingStaticPathFound.message(ctx.pathname),
-			hint: ctx.route?.component
-				? AstroErrorData.NoMatchingStaticPathFound.hint([ctx.route?.component])
-				: '',
-		});
-	}
-	const [params, props] = paramsAndPropsResp;
 
 	const context = createAPIContext({
 		request: ctx.request,

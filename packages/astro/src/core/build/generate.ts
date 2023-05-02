@@ -38,9 +38,8 @@ import { AstroError, AstroErrorData } from '../errors/index.js';
 import { debug, info } from '../logger/core.js';
 import {
 	createEnvironment,
+	getParamsAndPropsOrThrow,
 	createRenderContext,
-	getParamsAndProps,
-	GetParamsAndPropsError,
 	renderPage,
 } from '../render/index.js';
 import { callGetStaticPaths } from '../render/route-cache.js';
@@ -53,15 +52,10 @@ import { createRequest } from '../request.js';
 import { matchRoute } from '../routing/match.js';
 import { getOutputFilename } from '../util.js';
 import { getOutDirWithinCwd, getOutFile, getOutFolder } from './common.js';
-import {
-	eachPageData,
-	eachPrerenderedPageData,
-	getPageDataByComponent,
-	sortedCSS,
-} from './internal.js';
+import { eachPageData, getPageDataByComponent, sortedCSS } from './internal.js';
 import type { PageBuildData, SingleFileBuiltModule, StaticBuildOptions } from './types';
 import { getTimeStat } from './util.js';
-import { callMiddleware } from '../middleware/index.js';
+import { callMiddleware } from '../middleware/callMiddleware.js';
 
 function shouldSkipDraft(pageModule: ComponentInstance, settings: AstroSettings): boolean {
 	return (
@@ -114,8 +108,9 @@ export async function generatePages(opts: StaticBuildOptions, internals: BuildIn
 	const builtPaths = new Set<string>();
 
 	if (ssr) {
-		for (const pageData of eachPrerenderedPageData(internals)) {
-			await generatePage(opts, internals, pageData, ssrEntry, builtPaths);
+		for (const pageData of eachPageData(internals)) {
+			if (pageData.route.prerender)
+				await generatePage(opts, internals, pageData, ssrEntry, builtPaths);
 		}
 	} else {
 		for (const pageData of eachPageData(internals)) {
@@ -436,10 +431,10 @@ async function generatePath(
 		streaming: true,
 	});
 
-	const ctx = createRenderContext({
+	const renderContext = createRenderContext({
 		origin,
 		pathname,
-		request: createRequest({ url, headers: new Headers(), logging, ssr, locals: {}}),
+		request: createRequest({ url, headers: new Headers(), logging, ssr, locals: {} }),
 		componentMetadata: internals.componentMetadata,
 		scripts,
 		links,
@@ -454,7 +449,7 @@ async function generatePath(
 		const result = await callEndpoint(
 			endpointHandler,
 			env,
-			ctx,
+			renderContext,
 			logging,
 			middleware as AstroMiddlewareInstance<Response | EndpointOutput>
 		);
@@ -472,28 +467,20 @@ async function generatePath(
 	} else {
 		let response: Response;
 		try {
-			const paramsAndPropsResp = await getParamsAndProps({
-				mod: mod as any,
-				route: ctx.route,
-				routeCache: env.routeCache,
-				pathname: ctx.pathname,
-				logging: env.logging,
-				ssr: env.ssr,
+			const [params, props] = await getParamsAndPropsOrThrow({
+				options: {
+					mod: mod as any,
+					route: renderContext.route,
+					routeCache: env.routeCache,
+					pathname: renderContext.pathname,
+					logging: env.logging,
+					ssr: env.ssr,
+				},
+				context: renderContext,
 			});
 
-			if (paramsAndPropsResp === GetParamsAndPropsError.NoMatchingStaticPath) {
-				throw new AstroError({
-					...AstroErrorData.NoMatchingStaticPathFound,
-					message: AstroErrorData.NoMatchingStaticPathFound.message(ctx.pathname),
-					hint: ctx.route?.component
-						? AstroErrorData.NoMatchingStaticPathFound.hint([ctx.route?.component])
-						: '',
-				});
-			}
-			const [params, props] = paramsAndPropsResp;
-
-			const context = createAPIContext({
-				request: ctx.request,
+			const apiContext = createAPIContext({
+				request: renderContext.request,
 				params,
 				props,
 				site: env.site,
@@ -504,13 +491,13 @@ async function generatePath(
 			if (onRequest) {
 				response = await callMiddleware<Response>(
 					onRequest as MiddlewareResponseHandler,
-					context,
+					apiContext,
 					() => {
-						return renderPage(mod, ctx, env, context);
+						return renderPage({ mod, renderContext, env, apiContext, params, props });
 					}
 				);
 			} else {
-				response = await renderPage(mod, ctx, env, context);
+				response = await renderPage({ mod, renderContext, env, apiContext, params, props });
 			}
 		} catch (err) {
 			if (!AstroError.is(err) && !(err as SSRError).id && typeof err === 'object') {

@@ -1,6 +1,6 @@
 import type http from 'http';
 import mime from 'mime';
-import type { AstroSettings, ComponentInstance, ManifestData, RouteData } from '../@types/astro';
+import type { ComponentInstance, ManifestData, RouteData } from '../@types/astro';
 import type {
 	ComponentPreload,
 	DevelopmentEnvironment,
@@ -11,15 +11,13 @@ import { call as callEndpoint } from '../core/endpoint/dev/index.js';
 import { throwIfRedirectNotAllowed } from '../core/endpoint/index.js';
 import { AstroErrorData } from '../core/errors/index.js';
 import { warn } from '../core/logger/core.js';
-import { appendForwardSlash } from '../core/path.js';
 import { preload, renderPage } from '../core/render/dev/index.js';
 import { getParamsAndProps, GetParamsAndPropsError } from '../core/render/index.js';
 import { createRequest } from '../core/request.js';
 import { matchAllRoutes } from '../core/routing/index.js';
-import { resolvePages } from '../core/util.js';
 import { log404 } from './common.js';
 import { handle404Response, writeSSRResult, writeWebResponse } from './response.js';
-import { loadMiddleware } from '../core/middleware/index.js';
+import { loadMiddleware } from '../core/middleware/loadMiddleware.js';
 
 type AsyncReturnType<T extends (...args: any) => Promise<any>> = T extends (
 	...args: any
@@ -35,11 +33,9 @@ interface MatchedRoute {
 	mod: ComponentInstance;
 }
 
-function getCustom404Route({ config }: AstroSettings, manifest: ManifestData) {
-	// For Windows compat, use relative page paths to match the 404 route
-	const relPages = resolvePages(config).href.replace(config.root.href, '');
-	const pattern = new RegExp(`${appendForwardSlash(relPages)}404.(astro|md)`);
-	return manifest.routes.find((r) => r.component.match(pattern));
+function getCustom404Route(manifest: ManifestData): RouteData | undefined {
+	const route404 = /^\/404\/?$/;
+	return manifest.routes.find((r) => route404.test(r.route));
 }
 
 export async function matchRoute(
@@ -97,7 +93,7 @@ export async function matchRoute(
 	}
 
 	log404(logging, pathname);
-	const custom404 = getCustom404Route(settings, manifest);
+	const custom404 = getCustom404Route(manifest);
 
 	if (custom404) {
 		const filePath = new URL(`./${custom404.component}`, settings.config.root);
@@ -125,8 +121,7 @@ export async function handleRoute(
 	env: DevelopmentEnvironment,
 	manifest: ManifestData,
 	req: http.IncomingMessage,
-	res: http.ServerResponse,
-	locals: object | undefined
+	res: http.ServerResponse
 ): Promise<void> {
 	const { logging, settings } = env;
 	if (!matchedRoute) {
@@ -147,7 +142,6 @@ export async function handleRoute(
 		logging,
 		ssr: buildingToSSR,
 		clientAddress: buildingToSSR ? req.socket.remoteAddress : undefined,
-		locals: locals ?? {},
 	});
 
 	// Set user specified headers to response object.
@@ -196,8 +190,7 @@ export async function handleRoute(
 					env,
 					manifest,
 					req,
-					res,
-					locals ?? {}
+					res
 				);
 			}
 			throwIfRedirectNotAllowed(result.response, config);
