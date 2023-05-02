@@ -13,6 +13,7 @@ export interface CreateRequestOptions {
 	body?: RequestBody | undefined;
 	logging: LogOptions;
 	ssr: boolean;
+	locals: object;
 }
 
 const clientAddressSymbol = Symbol.for('astro.clientAddress');
@@ -26,6 +27,7 @@ export function createRequest({
 	body = undefined,
 	logging,
 	ssr,
+	locals,
 }: CreateRequestOptions): Request {
 	let headersObj =
 		headers instanceof Headers

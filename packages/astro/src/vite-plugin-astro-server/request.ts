@@ -13,6 +13,8 @@ import { runWithErrorHandling } from './controller.js';
 import { handle500Response } from './response.js';
 import { handleRoute, matchRoute } from './route.js';
 
+const clientLocalsSymbol = Symbol.for('astro.locals');
+
 /** The main logic to route dev server requests to pages in Astro. */
 export async function handleRequest(
 	env: DevelopmentEnvironment,
@@ -60,6 +62,8 @@ export async function handleRequest(
 		body = Buffer.concat(bytes);
 	}
 
+	const locals = Reflect.get(req, clientLocalsSymbol);
+
 	await runWithErrorHandling({
 		controller,
 		pathname,
@@ -75,7 +79,8 @@ export async function handleRequest(
 				env,
 				manifest,
 				req,
-				res
+				res,
+				locals
 			);
 		},
 		onError(_err) {

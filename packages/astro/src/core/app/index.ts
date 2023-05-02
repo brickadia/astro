@@ -137,7 +137,10 @@ export class App {
 			}
 		}
 
-		Reflect.set(request, clientLocalsSymbol, {});
+		const locals = Reflect.get(request, clientLocalsSymbol);
+		if (!locals || typeof locals !== 'object') {
+			Reflect.set(request, clientLocalsSymbol, {});
+		}
 
 		// Use the 404 status code for 404.astro components
 		if (routeData.route === '/404') {

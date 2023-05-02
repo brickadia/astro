@@ -125,7 +125,8 @@ export async function handleRoute(
 	env: DevelopmentEnvironment,
 	manifest: ManifestData,
 	req: http.IncomingMessage,
-	res: http.ServerResponse
+	res: http.ServerResponse,
+	locals: object | undefined
 ): Promise<void> {
 	const { logging, settings } = env;
 	if (!matchedRoute) {
@@ -146,6 +147,7 @@ export async function handleRoute(
 		logging,
 		ssr: buildingToSSR,
 		clientAddress: buildingToSSR ? req.socket.remoteAddress : undefined,
+		locals: locals ?? {},
 	});
 
 	// Set user specified headers to response object.
@@ -194,7 +196,8 @@ export async function handleRoute(
 					env,
 					manifest,
 					req,
-					res
+					res,
+					locals
 				);
 			}
 			throwIfRedirectNotAllowed(result.response, config);
