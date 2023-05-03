@@ -121,7 +121,8 @@ export async function handleRoute(
 	env: DevelopmentEnvironment,
 	manifest: ManifestData,
 	req: http.IncomingMessage,
-	res: http.ServerResponse
+	res: http.ServerResponse,
+	locals: object | undefined
 ): Promise<void> {
 	const { logging, settings } = env;
 	if (!matchedRoute) {
@@ -141,6 +142,7 @@ export async function handleRoute(
 		body,
 		logging,
 		ssr: buildingToSSR,
+		locals: locals ?? {},
 		clientAddress: buildingToSSR ? req.socket.remoteAddress : undefined,
 	});
 
@@ -190,7 +192,8 @@ export async function handleRoute(
 					env,
 					manifest,
 					req,
-					res
+					res,
+					locals
 				);
 			}
 			throwIfRedirectNotAllowed(result.response, config);
